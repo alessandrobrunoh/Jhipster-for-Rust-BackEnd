@@ -1,0 +1,40 @@
+pub mod rest;
+use axum::Router;
+use crate::config::AppState;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        rest::health_resource::health_check,
+        rest::auth_resource::login,
+        rest::auth_resource::register,
+        rest::truck_resource::list_trucks,
+        rest::truck_resource::create_truck,
+    ),
+    components(
+        schemas(
+            rest::auth_resource::LoginVM,
+            rest::auth_resource::JWTToken,
+            crate::domain::truck::Truck,
+            crate::domain::truck::NewTruck
+        )
+    ),
+    tags(
+        (name = "Health", description = "Health check endpoints"),
+        (name = "Auth", description = "Authentication endpoints"),
+        (name = "Trucks", description = "Truck management endpoints")
+    )
+)]
+pub struct ApiDoc;
+
+pub fn router() -> Router<AppState> {
+    let swagger = SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi());
+
+    Router::new()
+        .nest("/api", rest::truck_resource::router())
+        .nest("/api", rest::auth_resource::router())
+        .nest("/management", rest::health_resource::router())
+        .merge(swagger)
+}

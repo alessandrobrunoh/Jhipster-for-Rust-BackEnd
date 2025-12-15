@@ -1,0 +1,35 @@
+import axios from 'axios';
+
+const API_URL = '/api/';
+
+class AuthService {
+  async login(username, password) {
+    const response = await axios.post(API_URL + 'authenticate', {
+      username,
+      password
+    });
+    if (response.data.id_token) {
+      localStorage.setItem('user', JSON.stringify(response.data));
+    }
+    return response.data;
+  }
+
+  logout() {
+    localStorage.removeItem('user');
+  }
+
+  getCurrentUser() {
+    return JSON.parse(localStorage.getItem('user'));
+  }
+
+  getAuthHeader() {
+    const user = this.getCurrentUser();
+    if (user && user.id_token) {
+      return { Authorization: 'Bearer ' + user.id_token };
+    } else {
+      return {};
+    }
+  }
+}
+
+export default new AuthService();

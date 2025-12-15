@@ -1,24 +1,54 @@
-use axum::{
-    routing::get,
-    Router,
-};
 use std::net::SocketAddr;
+use tower_http::trace::TraceLayer;
+use dotenvy::dotenv;
+
+mod config;
+mod domain;
+mod repository;
+mod service;
+mod infrastructure;
+mod security;
+
+{% if router_strategy == "AxumFolderRouter" %}
+mod routes; // Generated folder structure
+{% else %}
+mod web; // Standard Controllers
+{% endif %}
 
 #[tokio::main]
 async fn main() {
-    // Initialize tracing
+    dotenv().ok();
     tracing_subscriber::fmt::init();
 
-    let app = Router::new()
-        .route("/", get(root));
+    // Init Infrastructure
+    let db = infrastructure::init_db().await;
+    
+    {% if "redis" in infrastructure %}
+    let redis = infrastructure::init_redis();
+    {% endif %}
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let state = config::AppState {
+        db,
+        {% if "redis" in infrastructure %}
+        redis,
+        {% endif %}
+    };
+
+    {% if router_strategy == "AxumFolderRouter" %}
+    // Placeholder for folder-based router initialization
+    // let app = routes::router().layer(TraceLayer::new_for_http()).with_state(state);
+    // For manual wiring example:
+    let app = axum::Router::new(); // TODO: Wire up routes/ folder automatically or manually
+    {% else %}
+    let app = web::router()
+        .layer(TraceLayer::new_for_http())
+        .with_state(state);
+    {% endif %}
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
     tracing::info!("listening on {}", addr);
+    tracing::info!("Swagger UI available at http://localhost:8080/swagger-ui");
     
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
-}
-
-async fn root() -> &'static str {
-    "Hello from {{ name }}! Database: {{ database | capitalize }}"
 }

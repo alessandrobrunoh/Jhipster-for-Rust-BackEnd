@@ -1,0 +1,80 @@
+use std::env;
+
+{% if orm == "sqlx" %}
+    {% if database == "postgres" %}
+    use sqlx::postgres::PgPoolOptions;
+    pub type DbPool = sqlx::PgPool;
+    {% elif database == "mysql" %}
+    use sqlx::mysql::MySqlPoolOptions;
+    pub type DbPool = sqlx::MySqlPool;
+    {% elif database == "sqlite" %}
+    use sqlx::sqlite::SqlitePoolOptions;
+    pub type DbPool = sqlx::SqlitePool;
+    {% endif %}
+{% elif orm == "diesel" %}
+    use diesel::r2d2::{self, ConnectionManager};
+    {% if database == "postgres" %}
+    use diesel::PgConnection;
+    pub type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
+    {% elif database == "mysql" %}
+    use diesel::MysqlConnection;
+    pub type DbPool = r2d2::Pool<ConnectionManager<MysqlConnection>>;
+    {% elif database == "sqlite" %}
+    use diesel::SqliteConnection;
+    pub type DbPool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
+    {% endif %}
+{% elif database == "mongodb" %}
+    use mongodb::{options::ClientOptions, Client};
+    pub type DbPool = Client;
+{% endif %}
+
+{% if "redis" in infrastructure %}
+use redis::Client as RedisClient;
+{% endif %}
+
+pub async fn init_db() -> DbPool {
+    let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+
+{% if orm == "sqlx" %}
+    {% if database == "postgres" %}
+    PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&db_url)
+        .await
+        .expect("Failed to create database pool")
+    {% elif database == "mysql" %}
+    MySqlPoolOptions::new()
+        .max_connections(5)
+        .connect(&db_url)
+        .await
+        .expect("Failed to create database pool")
+    {% elif database == "sqlite" %}
+    SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect(&db_url)
+        .await
+        .expect("Failed to create database pool")
+    {% endif %}
+{% elif orm == "diesel" %}
+    {% if database == "postgres" %}
+    let manager = ConnectionManager::<PgConnection>::new(db_url);
+    {% elif database == "mysql" %}
+    let manager = ConnectionManager::<MysqlConnection>::new(db_url);
+    {% elif database == "sqlite" %}
+    let manager = ConnectionManager::<SqliteConnection>::new(db_url);
+    {% endif %}
+    r2d2::Pool::builder()
+        .build(manager)
+        .expect("Failed to create database pool")
+{% elif database == "mongodb" %}
+    let options = ClientOptions::parse(&db_url).await.expect("Failed to parse MongoDB URI");
+    Client::with_options(options).expect("Failed to initialize MongoDB client")
+{% endif %}
+}
+
+{% if "redis" in infrastructure %}
+pub fn init_redis() -> RedisClient {
+    let redis_url = env::var("REDIS_URL").expect("REDIS_URL must be set");
+    RedisClient::open(redis_url).expect("Failed to create Redis client")
+}
+{% endif %}

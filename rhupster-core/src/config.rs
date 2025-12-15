@@ -4,21 +4,37 @@ use serde::{Deserialize, Serialize};
 pub struct ProjectConfig {
     pub name: String,
     pub database: Database,
+    pub orm: Orm,
     pub infrastructure: Vec<Infrastructure>,
     pub frontend: Frontend,
     pub authentication: Authentication,
     pub devops: DevOps,
+    pub router_strategy: RouterStrategy,
+    pub hateoas: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum Database {
     Postgres,
     MySQL,
-    MongoDB,
+    MongoDB, // Not supported by Diesel
     SQLite,
 }
 
 impl std::fmt::Display for Database {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum Orm {
+    Sqlx,
+    Diesel,
+    None, // For MongoDB or raw usage
+}
+
+impl std::fmt::Display for Orm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -42,7 +58,7 @@ pub enum Frontend {
     Vue,
     Svelte,
     Angular,
-    None, // Fallback
+    None,
 }
 
 impl std::fmt::Display for Frontend {
@@ -55,6 +71,7 @@ impl std::fmt::Display for Frontend {
 pub enum Authentication {
     None,
     Basic,
+    Jwt, // New JWT option
     OAuth2(Vec<OAuthProvider>),
 }
 
@@ -75,4 +92,17 @@ impl std::fmt::Display for OAuthProvider {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DevOps {
     pub docker_compose: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum RouterStrategy {
+    Standard,
+    AxumController,
+    AxumFolderRouter,
+}
+
+impl std::fmt::Display for RouterStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }

@@ -1,0 +1,45 @@
+-- Initial Schema
+
+{% if database == "postgres" %}
+CREATE TABLE IF NOT EXISTS truck (
+    id SERIAL PRIMARY KEY,
+    license_plate VARCHAR(255) NOT NULL,
+    capacity FLOAT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(50) NOT NULL
+);
+{% elif database == "mysql" %}
+CREATE TABLE IF NOT EXISTS truck (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    license_plate VARCHAR(255) NOT NULL,
+    capacity FLOAT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(50) NOT NULL
+);
+{% elif database == "sqlite" %}
+CREATE TABLE IF NOT EXISTS truck (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    license_plate TEXT NOT NULL,
+    capacity REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL
+);
+{% endif %}
+
+-- Seed Data
+INSERT INTO users (username, password_hash, role) VALUES ('admin', '$argon2id$v=19$m=4096,t=3,p=1$c2FsdHNhbHQ$e/8tS8Q...', 'ROLE_ADMIN');

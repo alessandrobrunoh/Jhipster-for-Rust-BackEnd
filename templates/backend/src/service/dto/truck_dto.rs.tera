@@ -1,0 +1,23 @@
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+use crate::domain::truck::Truck;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, utoipa::ToSchema)]
+pub struct TruckDTO {
+    pub id: Option<i32>,
+    #[validate(length(min = 3))]
+    pub license_plate: String,
+    pub capacity: f32,
+}
+
+impl From<Truck> for TruckDTO {
+    fn from(truck: Truck) -> Self {
+        Self {
+            id: Some(truck.id),
+            license_plate: truck.license_plate,
+            capacity: truck.capacity,
+        }
+    }
+}
+
+// In a real app, implementing From<TruckDTO> for Truck might require more context (like ID generation)

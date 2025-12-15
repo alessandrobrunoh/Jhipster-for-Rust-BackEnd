@@ -1,0 +1,25 @@
+use crate::domain::truck::{Truck, NewTruck};
+use crate::service::dto::truck_dto::TruckDTO;
+use crate::repository::truck_repository::{TruckRepository, TruckRepositoryImpl};
+use std::sync::Arc;
+use anyhow::Result;
+
+pub struct TruckService {
+    pub repo: Arc<TruckRepositoryImpl>,
+}
+
+impl TruckService {
+    pub async fn get_all_trucks(&self) -> Result<Vec<TruckDTO>> {
+        let trucks = self.repo.find_all().await?;
+        Ok(trucks.into_iter().map(TruckDTO::from).collect())
+    }
+
+    pub async fn create_truck(&self, truck_dto: TruckDTO) -> Result<TruckDTO> {
+        let new_truck = NewTruck {
+            license_plate: truck_dto.license_plate,
+            capacity: truck_dto.capacity,
+        };
+        let saved_truck = self.repo.save(new_truck).await?;
+        Ok(TruckDTO::from(saved_truck))
+    }
+}

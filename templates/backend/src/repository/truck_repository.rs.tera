@@ -1,0 +1,42 @@
+use crate::domain::truck::{Truck, NewTruck};
+use crate::infrastructure::DbPool;
+use anyhow::Result;
+
+#[async_trait::async_trait]
+pub trait TruckRepository {
+    async fn find_all(&self) -> Result<Vec<Truck>>;
+    async fn save(&self, truck: NewTruck) -> Result<Truck>;
+}
+
+pub struct TruckRepositoryImpl {
+    pub pool: DbPool,
+}
+
+#[async_trait::async_trait]
+impl TruckRepository for TruckRepositoryImpl {
+    async fn find_all(&self) -> Result<Vec<Truck>> {
+        // Placeholder implementation
+        // In a real app, you would use sqlx::query_as! or diesel logic here
+        Ok(vec![
+            Truck {
+                id: 1,
+                license_plate: "MOCK-123".to_string(),
+                capacity: 1000.0,
+                {% if hateoas %}
+                _links: None,
+                {% endif %}
+            }
+        ])
+    }
+
+    async fn save(&self, truck: NewTruck) -> Result<Truck> {
+        Ok(Truck {
+            id: 2, // Mock ID
+            license_plate: truck.license_plate,
+            capacity: truck.capacity,
+            {% if hateoas %}
+            _links: None,
+            {% endif %}
+        })
+    }
+}

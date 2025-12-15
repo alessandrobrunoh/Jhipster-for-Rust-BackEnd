@@ -1,0 +1,37 @@
+use jsonwebtoken::{encode, decode, Header, Validation, EncodingKey, DecodingKey};
+use serde::{Deserialize, Serialize};
+use chrono::{Utc, Duration};
+use anyhow::Result;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Claims {
+    pub sub: String,
+    pub exp: usize,
+    pub role: String,
+}
+
+pub fn create_token(username: &str, role: &str) -> Result<String> {
+    let claims = Claims {
+        sub: username.to_owned(),
+        exp: (Utc::now() + Duration::hours(24)).timestamp() as usize,
+        role: role.to_owned(),
+    };
+    
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret("secret".as_ref()), // TODO: Load from env
+    )?;
+    
+    Ok(token)
+}
+
+pub fn validate_token(token: &str) -> Result<Claims> {
+    let token_data = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret("secret".as_ref()),
+        &Validation::default(),
+    )?;
+    
+    Ok(token_data.claims)
+}
