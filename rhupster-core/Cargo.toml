@@ -1,0 +1,12 @@
+[package]
+name = "rhupster-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+tera = "1.19"
+anyhow = "1.0"
+tokio = { version = "1.0", features = ["fs", "io-util", "macros"] }
+walkdir = "2.4"
+fs_extra = "1.3"
