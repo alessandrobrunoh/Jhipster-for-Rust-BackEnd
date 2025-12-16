@@ -1,0 +1,16 @@
+use axum::extract::State;
+use axum::http::StatusCode;
+use crate::di::app_state::AppState;
+use std::sync::Arc;
+
+#[utoipa::path(
+    get,
+    path = "/health",
+    responses(
+        (status = 200, description = "Service is healthy"),
+    ),
+    tag = "Health"
+)]
+pub async fn handler(State(_app_state): State<Arc<AppState>>) -> StatusCode {
+    StatusCode::OK
+}

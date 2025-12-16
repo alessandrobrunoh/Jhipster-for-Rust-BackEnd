@@ -10,14 +10,16 @@ pub struct ProjectConfig {
     pub authentication: Authentication,
     pub devops: DevOps,
     pub router_strategy: RouterStrategy,
+    pub api_ui: ApiUi,
     pub hateoas: bool,
+    pub ai_agents: Vec<AIAgent>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum Database {
     Postgres,
     MySQL,
-    MongoDB, // Not supported by Diesel
+    MongoDB,
     SQLite,
 }
 
@@ -31,7 +33,8 @@ impl std::fmt::Display for Database {
 pub enum Orm {
     Sqlx,
     Diesel,
-    None, // For MongoDB or raw usage
+    SeaOrm, // Added SeaOrm
+    None,
 }
 
 impl std::fmt::Display for Orm {
@@ -71,7 +74,7 @@ impl std::fmt::Display for Frontend {
 pub enum Authentication {
     None,
     Basic,
-    Jwt, // New JWT option
+    Jwt,
     OAuth2(Vec<OAuthProvider>),
 }
 
@@ -98,10 +101,36 @@ pub struct DevOps {
 pub enum RouterStrategy {
     Standard,
     AxumController,
-    AxumFolderRouter,
+    AxumFolderRouter, // Reintroduced AxumFolderRouter
 }
 
 impl std::fmt::Display for RouterStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum ApiUi {
+    Swagger,
+    Scalar,
+    None,
+}
+
+impl std::fmt::Display for ApiUi {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum AIAgent {
+    Claude,
+    Gemini,
+    GPT,
+}
+
+impl std::fmt::Display for AIAgent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }

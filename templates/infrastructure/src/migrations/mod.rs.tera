@@ -1,0 +1,31 @@
+{% if orm == "sqlx" %}
+#[cfg(feature = "sqlx-cli")]
+pub async fn run_migrations() -> anyhow::Result<()> {
+    // This is typically run via `sqlx migrate run` CLI, not programmatically in app.
+    // However, if you want programmatic migrations, uncomment and configure:
+    // let database_url = crate::config::get_database_url()?;
+    // let pool = sqlx::PgPool::connect(&database_url).await?; // Or MySqlPool, SqlitePool
+    // sqlx::migrate!("./migrations")
+    //     .run(&pool)
+    //     .await
+    //     .context("Failed to run SQLx migrations")?;
+    Ok(())
+}
+{% elif orm == "diesel" %}
+pub async fn run_migrations() -> anyhow::Result<()> {
+    // Diesel migrations are typically run via `diesel migration run` CLI.
+    // For programmatic migrations, you would need to use diesel_migrations crate.
+    Ok(())
+}
+{% elif orm == "seaorm" %}
+pub async fn run_migrations() -> anyhow::Result<()> {
+    // SeaORM migrations are typically run via `sea-orm-cli migrate up` CLI.
+    // If you want programmatic migrations, you'd use `Migrator::up()` from a separate `migration` crate.
+    Ok(())
+}
+{% else %}
+pub async fn run_migrations() -> anyhow::Result<()> {
+    // No ORM selected or migrations not implemented for this database
+    Ok(())
+}
+{% endif %}

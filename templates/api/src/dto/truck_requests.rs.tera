@@ -1,0 +1,49 @@
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+use domain::domain::truck::Truck;
+use application::commands::create_truck_cmd::CreateTruckCommand;
+use application::query::truck_query::TruckQuery;
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct CreateTruckRequest {
+    #[validate(length(min = 3, max = 50))]
+    pub license_plate: String,
+    #[validate(range(min = 1.0))]
+    pub capacity: f32,
+}
+
+impl From<CreateTruckRequest> for CreateTruckCommand {
+    fn from(req: CreateTruckRequest) -> Self {
+        CreateTruckCommand {
+            license_plate: req.license_plate,
+            capacity: req.capacity,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct TruckResponse {
+    pub id: u64,
+    pub license_plate: String,
+    pub capacity: f32,
+}
+
+impl From<Truck> for TruckResponse {
+    fn from(truck: Truck) -> Self {
+        TruckResponse {
+            id: truck.id.0,
+            license_plate: truck.license_plate,
+            capacity: truck.capacity,
+        }
+    }
+}
+
+impl From<TruckQuery> for TruckResponse {
+    fn from(query: TruckQuery) -> Self {
+        TruckResponse {
+            id: query.id,
+            license_plate: query.license_plate,
+            capacity: query.capacity,
+        }
+    }
+}

@@ -1,0 +1,236 @@
+use domain::domain::truck::{Truck, TruckId};
+use domain::domain::error::DomainError;
+use domain::ports::truck_repository::TruckRepository;
+use async_trait::async_trait;
+use anyhow::Result;
+{% if orm == "diesel" %}
+use anyhow::Context;
+{% endif %}
+use std::sync::Arc;
+
+use super::db_models::{TruckDb{% if orm == "diesel" %}, NewTruckDb{% elif orm == "seaorm" %}, TruckActiveModel{% endif %}};
+
+{% if orm == "sqlx" %}
+use super::db_connection::DbPool;
+{% elif orm == "diesel" %}
+use super::db_connection::{DbPool, PooledDb};
+use diesel::prelude::*;
+use diesel::insert_into;
+use super::schema::trucks;
+{% elif orm == "seaorm" %}
+use super::db_connection::DatabaseConnection;
+use sea_orm::{ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait, ActiveValue::Set};
+use super::entities::trucks::{Entity as TruckEntity, Model as TruckModel};
+{% elif database == "mongodb" %}
+use super::db_connection::Client;
+use mongodb::{bson::doc, options::FindOneOptions, options::FindOptions}; // Added FindOptions for find_all
+use futures::TryStreamExt;
+{% endif %}
+
+pub struct TruckRepositoryImpl {
+    {% if orm == "sqlx" %}
+    pool: Arc<DbPool>,
+    {% elif orm == "diesel" %}
+    pool: Arc<DbPool>,
+    {% elif orm == "seaorm" %}
+    db: Arc<DatabaseConnection>,
+    {% elif database == "mongodb" %}
+    client: Arc<Client>,
+    {% endif %}
+}
+
+impl TruckRepositoryImpl {
+    pub fn new(
+        {% if orm == "sqlx" %}pool: Arc<DbPool>{% elif orm == "diesel" %}pool: Arc<DbPool>{% elif orm == "seaorm" %}db: Arc<DatabaseConnection>{% elif database == "mongodb" %}client: Arc<Client>{% endif %}
+    ) -> Self {
+        Self { {% if orm == "sqlx" %}pool{% elif orm == "diesel" %}pool{% elif orm == "seaorm" %}db{% elif database == "mongodb" %}client{% endif %} }
+    }
+}
+
+#[async_trait]
+impl TruckRepository for TruckRepositoryImpl {
+    async fn find_by_id(&self, id: &TruckId) -> Result<Option<Truck>, DomainError> {
+        {% if orm == "sqlx" %}
+        let res = sqlx::query_as::<_, TruckDb>("SELECT id, license_plate, capacity FROM trucks WHERE id = $1")
+            .bind(id.0 as i64)
+            .fetch_optional(&*self.pool)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map(|db_truck| db_truck.into());
+        Ok(res)
+        {% elif orm == "diesel" %}
+        let mut conn: PooledDb = self.pool.get().context("Failed to get Diesel connection").map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        let res = trucks::table.filter(trucks::id.eq(id.0 as i64))
+            .first::<TruckDb>(&mut conn)
+            .optional()
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map(|db_truck| db_truck.into());
+        Ok(res)
+        {% elif orm == "seaorm" %}
+        let res = TruckEntity::find_by_id(id.0 as i64)
+            .one(&*self.db)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map(|model| model.into());
+        Ok(res)
+        {% elif database == "mongodb" %}
+        let collection = self.client.database("{{ name | replace(from="-", to="_") }}_db").collection::<TruckDb>("trucks");
+        let options = FindOneOptions::builder().build();
+        let res = collection.find_one(doc! {"_id": id.0 as i64}, options)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map(|db_truck| db_truck.into());
+        Ok(res)
+        {% else %}
+        unimplemented!()
+        {% endif %}
+    }
+
+    async fn find_all(&self) -> Result<Vec<Truck>, DomainError> {
+        {% if orm == "sqlx" %}
+        Ok(sqlx::query_as::<_, TruckDb>("SELECT id, license_plate, capacity FROM trucks")
+            .fetch_all(&*self.pool)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .into_iter()
+            .map(|db_truck| db_truck.into())
+            .collect::<Vec<Truck>>())
+        {% elif orm == "diesel" %}
+        let mut conn: PooledDb = self.pool.get().context("Failed to get Diesel connection").map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        Ok(trucks::table
+            .load::<TruckDb>(&mut conn)
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .into_iter()
+            .map(|db_truck| db_truck.into())
+            .collect::<Vec<Truck>>())
+        {% elif orm == "seaorm" %}
+        Ok(TruckEntity::find()
+            .all(&*self.db)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .into_iter()
+            .map(|model| model.into())
+            .collect::<Vec<Truck>>())
+        {% elif database == "mongodb" %}
+        let collection = self.client.database("{{ name | replace(from="-", to="_") }}_db").collection::<TruckDb>("trucks");
+        let options = FindOptions::builder().build();
+        let mut cursor = collection.find(None, options).await.map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        let mut trucks = Vec::new();
+        while let Some(result) = cursor.try_next().await.map_err(|e| DomainError::DatabaseError(e.to_string()))? {
+            trucks.push(result.into());
+        }
+        Ok(trucks)
+        {% else %}
+        unimplemented!()
+        {% endif %}
+    }
+
+    async fn save(&self, truck: Truck) -> Result<Truck, DomainError> {
+        {% if orm == "sqlx" %}
+        // If truck.id is 0, it's new
+        if truck.id.0 == 0 {
+            let inserted = sqlx::query_as::<_, TruckDb>("INSERT INTO trucks (license_plate, capacity) VALUES ($1, $2) RETURNING id, license_plate, capacity")
+                .bind(truck.license_plate)
+                .bind(truck.capacity)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            Ok(inserted.into())
+        } else {
+            let updated = sqlx::query_as::<_, TruckDb>("UPDATE trucks SET license_plate = $1, capacity = $2 WHERE id = $3 RETURNING id, license_plate, capacity")
+                .bind(truck.license_plate)
+                .bind(truck.capacity)
+                .bind(truck.id.0 as i64)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            Ok(updated.into())
+        }
+        {% elif orm == "diesel" %}
+        let mut conn: PooledDb = self.pool.get().context("Failed to get Diesel connection").map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        if truck.id.0 == 0 {
+            let new_truck_db = NewTruckDb {
+                license_plate: truck.license_plate,
+                capacity: truck.capacity,
+            };
+            insert_into(trucks::table)
+                .values(&new_truck_db)
+                .get_result::<TruckDb>(&mut conn)
+                .map_err(|e| DomainError::DatabaseError(e.to_string()))
+                .map(|db_truck| db_truck.into())
+                .map_err(|e| DomainError::InternalError(format!("Failed to convert TruckDb to Truck: {}", e)))
+        } else {
+            let updated_truck_db = TruckDb {
+                id: truck.id.0 as i64,
+                license_plate: truck.license_plate,
+                capacity: truck.capacity,
+            };
+            diesel::update(trucks::table.filter(trucks::id.eq(truck.id.0 as i64)))
+                .set(&updated_truck_db)
+                .get_result::<TruckDb>(&mut conn)
+                .map_err(|e| DomainError::DatabaseError(e.to_string()))
+                .map(|db_truck| db_truck.into())
+                .map_err(|e| DomainError::InternalError(format!("Failed to convert TruckDb to Truck: {}", e)))
+        }
+        {% elif orm == "seaorm" %}
+        let active_model: TruckActiveModel = truck.into();
+        let saved_model = active_model.save(&*self.db)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        Ok(saved_model.into_model().into())
+        {% elif database == "mongodb" %}
+        let collection = self.client.database("{{ name | replace(from="-", to="_") }}_db").collection::<TruckDb>("trucks");
+        let new_truck_db = TruckDb {
+            id: None,
+            license_plate: truck.license_plate.clone(),
+            capacity: truck.capacity,
+            created_at: mongodb::bson::DateTime::now(),
+            updated_at: mongodb::bson::DateTime::now(),
+        };
+        collection.insert_one(new_truck_db, None)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        // Retrieve assuming unique license plate or handle ID
+        // For simplicity/demo:
+        Ok(truck)
+        {% else %}
+        unimplemented!()
+        {% endif %}
+    }
+
+    async fn delete(&self, id: &TruckId) -> Result<(), DomainError> {
+        {% if orm == "sqlx" %}
+        sqlx::query("DELETE FROM trucks WHERE id = $1")
+            .bind(id.0 as i64)
+            .execute(&*self.pool)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        Ok(())
+        {% elif orm == "diesel" %}
+        let mut conn: PooledDb = self.pool.get().context("Failed to get Diesel connection").map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        diesel::delete(trucks::table.filter(trucks::id.eq(id.0 as i64)))
+            .execute(&mut conn)
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        Ok(())
+        {% elif orm == "seaorm" %}
+        let truck: TruckActiveModel = TruckEntity::find_by_id(id.0 as i64)
+            .one(&*self.db)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .ok_or_else(|| DomainError::TruckNotFound(id.0.to_string()))?
+            .into_active_model();
+        truck.delete(&*self.db)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        Ok(())
+        {% elif database == "mongodb" %}
+        let collection = self.client.database("{{ name | replace(from="-", to="_") }}_db").collection::<TruckDb>("trucks");
+        collection.delete_one(doc! {"_id": id.0 as i64}, None)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        Ok(())
+        {% else %}
+        unimplemented!()
+        {% endif %}
+    }
+}

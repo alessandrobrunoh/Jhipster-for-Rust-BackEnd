@@ -1,0 +1,116 @@
+use axum::{
+    extract::{State, Path},
+    Json,
+    http::StatusCode,
+};
+use crate::di::app_state::AppState;
+use crate::error::AppError;
+use crate::dto::truck_requests::{CreateTruckRequest, TruckResponse};
+use domain::domain::truck::TruckId;
+use validator::Validate;
+use std::sync::Arc;
+
+#[utoipa::path(
+    post,
+    path = "/api/trucks",
+    request_body = CreateTruckRequest,
+    responses(
+        (status = 201, description = "Truck created successfully", body = TruckResponse),
+        (status = 400, description = "Bad Request", body = AppError),
+        (status = 500, description = "Internal Server Error", body = AppError)
+    ),
+    tag = "Truck"
+)]
+pub async fn create_truck(
+    State(app_state): State<Arc<AppState>>,
+    Json(payload): Json<CreateTruckRequest>,
+) -> Result<(StatusCode, Json<TruckResponse>), AppError> {
+    payload.validate()?;
+    let command = payload.into();
+    let truck = app_state.truck_service.create_truck(command).await?;
+    Ok((StatusCode::CREATED, Json(truck.into())))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/trucks/{id}",
+    responses(
+        (status = 200, description = "Truck details", body = TruckResponse),
+        (status = 404, description = "Truck not found", body = AppError),
+        (status = 500, description = "Internal Server Error", body = AppError)
+    ),
+    params(
+        ("id" = u64, Path, description = "ID of the truck to retrieve")
+    ),
+    tag = "Truck"
+)]
+pub async fn get_truck(
+    State(app_state): State<Arc<AppState>>,
+    Path(id): Path<u64>,
+) -> Result<Json<TruckResponse>, AppError> {
+    let truck = app_state.truck_service.get_truck(TruckId(id)).await?;
+    Ok(Json(truck.into()))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/trucks",
+    responses(
+        (status = 200, description = "List of trucks", body = [TruckResponse]),
+        (status = 500, description = "Internal Server Error", body = AppError)
+    ),
+    tag = "Truck"
+)]
+pub async fn get_all_trucks(
+    State(app_state): State<Arc<AppState>>,
+) -> Result<Json<Vec<TruckResponse>>, AppError> {
+    let trucks = app_state.truck_service.get_all_trucks().await?;
+    Ok(Json(trucks.into_iter().map(Into::into).collect()))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/trucks/{id}",
+    request_body = CreateTruckRequest,
+    responses(
+        (status = 200, description = "Truck updated successfully", body = TruckResponse),
+        (status = 400, description = "Bad Request", body = AppError),
+        (status = 404, description = "Truck not found", body = AppError),
+        (status = 500, description = "Internal Server Error", body = AppError)
+    ),
+    params(
+        ("id" = u64, Path, description = "ID of the truck to update")
+    ),
+    tag = "Truck"
+)]
+pub async fn update_truck(
+    State(app_state): State<Arc<AppState>>,
+    Path(id): Path<u64>,
+    Json(payload): Json<CreateTruckRequest>,
+) -> Result<Json<TruckResponse>, AppError> {
+    payload.validate()?;
+    let command = payload.into();
+    let truck = app_state.truck_service.update_truck(TruckId(id), command).await?;
+    Ok(Json(truck.into()))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/trucks/{id}",
+    responses(
+        (status = 204, description = "Truck deleted successfully"),
+        (status = 404, description = "Truck not found", body = AppError),
+        (status = 500, description = "Internal Server Error", body = AppError)
+    ),
+    params(
+        ("id" = u64, Path, description = "ID of the truck to delete")
+    ),
+    tag = "Truck"
+)]
+pub async fn delete_truck(
+    State(app_state): State<Arc<AppState>>,
+    Path(id): Path<u64>,
+) -> Result<StatusCode, AppError> {
+    app_state.truck_service.delete_truck(TruckId(id)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}

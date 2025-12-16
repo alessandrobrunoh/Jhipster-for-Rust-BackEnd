@@ -1,0 +1,47 @@
+use axum::{
+    async_trait,
+    extract::{FromRequestParts, FromRef},
+    http::request::Parts,
+};
+use crate::error::AppError;
+use crate::di::app_state::AppState; // To access services
+use std::sync::Arc;
+
+// Assuming UserId is a core domain type
+use domain::domain::user::UserId;
+use application::query::user_profile_query::UserProfileQuery; // To return profile data
+
+// This is a placeholder for a real authentication extractor
+// In a real application, this would:
+// 1. Extract a token (e.g., JWT) from headers.
+// 2. Validate the token.
+// 3. Retrieve user information from a database or cache.
+// 4. Return the authenticated user's ID or profile.
+
+pub struct AuthenticatedUser(pub UserProfileQuery);
+
+#[async_trait]
+impl<S> FromRequestParts<S> for AuthenticatedUser
+where
+    S: Send + Sync,
+    Arc<AppState>: axum::extract::FromRef<S>,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(_parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        // --- Placeholder Logic ---
+        // For demonstration, we'll simulate an authenticated user with ID 1
+        // In reality, this would involve JWT validation, database lookup, etc.
+
+        // Get AppState from state
+        let app_state: Arc<AppState> = FromRef::from_ref(state);
+
+        let user_id = UserId(1); // Simulate authenticated user ID
+
+        let user_profile = app_state.user_service.get_user_profile(user_id)
+            .await
+            .map_err(|e| AppError::from(e))?;
+
+        Ok(AuthenticatedUser(user_profile))
+    }
+}

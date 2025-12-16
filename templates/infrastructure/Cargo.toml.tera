@@ -1,0 +1,57 @@
+[package]
+name = "infrastructure"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# Dependencies from workspace Cargo.toml
+domain = { path = "../core", package = "core" }
+application = { path = "../application" }
+anyhow = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] } # Use full tokio features as needed
+async-trait = { workspace = true } # For implementing async traits
+serde = { workspace = true, features = ["derive"] }
+
+# Database
+dotenvy = "0.15" # For loading .env
+
+{% if orm == "sqlx" %}
+sqlx = { workspace = true, features = ["runtime-tokio-rustls", "{{ database }}", "uuid", "chrono", "macros"] }
+# Include sqlx-cli for migrations
+sqlx-cli = { version = "0.7", optional = true, default-features = false, features = ["{{ database }}", "rustls"] }
+{% elif orm == "diesel" %}
+diesel = { workspace = true, features = ["{{ database }}", "r2d2", "chrono", "uuid"] }
+diesel_migrations = { workspace = true }
+r2d2 = "0.8" # For Diesel connection pooling
+{% elif orm == "seaorm" %}
+sea-orm = { workspace = true, features = ["sqlx-{{ database }}", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
+sea-orm-migration = { workspace = true }
+# sea-orm-cli is usually a dev-dependency or global tool, not a crate dependency for runtime
+{% elif database == "mongodb" %}
+mongodb = { workspace = true }
+futures = "0.3" # For async operations with mongodb
+{% endif %}
+
+# Redis
+{% if "redis" in infrastructure %}
+redis = { version = "0.24", features = ["tokio-comp"] }
+# Optionally add `bb8-redis` for connection pooling
+# bb8-redis = "0.12"
+# bb8 = "0.8"
+{% endif %}
+
+[dev-dependencies]
+# For testing infrastructure components
+# sqlx-macros = { version = "0.7", features = ["derive_sqlx_macros"] }
+# uuid = { version = "1.0", features = ["v4", "serde"] }
+
+[features]
+default = []
+# Feature to enable sqlx-cli for migrations.
+# This allows using `cargo sqlx` commands from the infrastructure crate.
+{% if orm == "sqlx" %}
+sqlx-cli = ["dep:sqlx-cli"]
+{% endif %}

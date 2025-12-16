@@ -1,0 +1,70 @@
+use domain::domain::user::{User, UserId};
+use domain::domain::error::DomainError;
+use domain::ports::user_repository::UserRepository;
+use domain::ports::transaction_manager::TransactionManager;
+use crate::commands::register_user_cmd::RegisterUserCommand;
+use crate::query::user_profile_query::UserProfileQuery;
+use async_trait::async_trait;
+use std::sync::Arc;
+
+#[async_trait]
+pub trait UserService: Send + Sync {
+    async fn register_user(&self, cmd: RegisterUserCommand) -> Result<User, DomainError>;
+    async fn get_user_profile(&self, user_id: UserId) -> Result<UserProfileQuery, DomainError>;
+    async fn find_user_by_username(&self, username: &str) -> Result<User, DomainError>;
+}
+
+pub struct UserServiceImpl {
+    user_repo: Arc<dyn UserRepository>,
+    tx_manager: Arc<dyn TransactionManager>,
+}
+
+impl UserServiceImpl {
+    pub fn new(user_repo: Arc<dyn UserRepository>, tx_manager: Arc<dyn TransactionManager>) -> Self {
+        Self { user_repo, tx_manager }
+    }
+}
+
+#[async_trait]
+impl UserService for UserServiceImpl {
+    async fn register_user(&self, cmd: RegisterUserCommand) -> Result<User, DomainError> {
+        self.tx_manager.begin_transaction().await?;
+
+        // Check if user already exists
+        if let Ok(Some(_)) = self.user_repo.find_by_username(&cmd.username).await {
+             self.tx_manager.rollback_transaction().await?;
+             return Err(DomainError::ValidationError(format!("Username {} already taken", cmd.username)));
+        }
+
+        // Create new user entity (ID will be assigned by infrastructure)
+        let new_user = User::new(UserId(0), cmd.username.clone(), cmd.email); // ID will be set by repo
+
+        match self.user_repo.save(new_user).await {
+            Ok(saved_user) => {
+                self.tx_manager.commit_transaction().await?;
+                Ok(saved_user)
+            }
+            Err(e) => {
+                self.tx_manager.rollback_transaction().await?;
+                Err(e)
+            }
+        }
+    }
+
+    async fn get_user_profile(&self, user_id: UserId) -> Result<UserProfileQuery, DomainError> {
+        let user = self.user_repo.find_by_id(&user_id).await?
+            .ok_or_else(|| DomainError::UserNotFound(user_id.0.to_string()))?;
+
+        Ok(UserProfileQuery {
+            id: user.id.0,
+            username: user.username,
+            email: user.email,
+        })
+    }
+
+    async fn find_user_by_username(&self, username: &str) -> Result<User, DomainError> {
+        let user = self.user_repo.find_by_username(username).await?
+            .ok_or_else(|| DomainError::UserNotFound(username.to_string()))?;
+        Ok(user)
+    }
+}

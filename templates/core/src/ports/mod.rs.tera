@@ -1,0 +1,3 @@
+pub mod user_repository;
+pub mod truck_repository; // Assuming we have a truck entity
+pub mod transaction_manager;

@@ -1,0 +1,27 @@
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UserId(pub u64); // Example: u64 for ID
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct User {
+    pub id: UserId,
+    #[validate(length(min = 3, max = 50))]
+    pub username: String,
+    #[validate(email)]
+    pub email: String,
+    // Add other user fields as needed
+}
+
+impl User {
+    pub fn new(id: UserId, username: String, email: String) -> Self {
+        User { id, username, email }
+    }
+
+    // Example business logic method
+    pub fn can_perform_action(&self) -> bool {
+        // Implement complex domain logic here
+        self.username != "guest" 
+    }
+}

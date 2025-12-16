@@ -1,3 +1,0 @@
-pub mod truck_resource;
-pub mod auth_resource;
-pub mod health_resource;

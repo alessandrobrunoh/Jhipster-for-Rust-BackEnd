@@ -1,0 +1,16 @@
+pub mod login;
+pub mod register;
+
+use axum::Router;
+use std::sync::Arc;
+use crate::di::app_state::AppState;
+
+pub fn create_routes(app_state: Arc<AppState>) -> Router {
+    Router::new()
+        .merge(Router::new()
+            .route("/api/auth/login", axum::routing::post(login::handler))
+            .with_state(app_state.clone()))
+        .merge(Router::new()
+            .route("/api/auth/register", axum::routing::post(register::handler))
+            .with_state(app_state))
+}

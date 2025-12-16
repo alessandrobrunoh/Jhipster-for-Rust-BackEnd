@@ -1,0 +1,55 @@
+use anyhow::Result;
+use std::sync::Arc;
+
+{% if "redis" in infrastructure %}
+use anyhow::Context;
+use tokio::sync::OnceCell;
+use crate::config::get_redis_url;
+use redis::Client as RedisClient;
+use redis::AsyncCommands;
+
+pub async fn get_redis_client() -> Result<Arc<RedisClient>> {
+    static INSTANCE: OnceCell<Arc<RedisClient>> = OnceCell::const_new();
+    INSTANCE.get_or_init(async {
+        let redis_url = get_redis_url().context("REDIS_URL not set")?;
+        let client = RedisClient::open(redis_url).context("Failed to create Redis client")?;
+
+        // Optional: Ping to check connection
+        let mut conn = client.get_async_connection().await.context("Failed to get Redis connection")?;
+        redis::cmd("PING").query_async(&mut conn).await.context("Failed to ping Redis server")?;
+
+        Ok(Arc::new(client))
+    })
+    .await
+    .clone()
+}
+
+// Example usage:
+pub async fn set_cache_value(key: &str, value: &str) -> Result<()> {
+    let client = get_redis_client().await?;
+    let mut conn = client.get_async_connection().await.context("Failed to get Redis connection")?;
+    conn.set(key, value).await.context("Failed to set value in Redis")?;
+    Ok(())
+}
+
+pub async fn get_cache_value(key: &str, ) -> Result<Option<String>> {
+    let client = get_redis_client().await?;
+    let mut conn = client.get_async_connection().await.context("Failed to get Redis connection")?;
+    let value: Option<String> = conn.get(key).await.context("Failed to get value from Redis")?;
+    Ok(value)
+}
+
+{% else %}
+// Placeholder if Redis is not enabled
+pub async fn get_redis_client() -> Result<Arc<()>> {
+    Ok(Arc::new(()))
+}
+
+pub async fn set_cache_value(_key: &str, _value: &str) -> Result<()> {
+    Ok(())
+}
+
+pub async fn get_cache_value(_key: &str) -> Result<Option<String>> {
+    Ok(None)
+}
+{% endif %}

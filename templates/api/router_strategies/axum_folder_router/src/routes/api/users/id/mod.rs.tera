@@ -1,0 +1,10 @@
+pub mod _handler;
+
+use axum::Router;
+use std::sync::Arc;
+use crate::di::app_state::AppState;
+
+pub fn create_routes(app_state: Arc<AppState>) -> Router {
+    Router::new()
+        .merge(_handler::create_routes(app_state.clone()))
+}

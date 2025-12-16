@@ -1,0 +1,19 @@
+use serde::Serialize;
+use domain::domain::truck::Truck;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TruckQuery {
+    pub id: u64,
+    pub license_plate: String,
+    pub capacity: f32,
+}
+
+impl From<Truck> for TruckQuery {
+    fn from(truck: Truck) -> Self {
+        Self {
+            id: truck.id.0,
+            license_plate: truck.license_plate,
+            capacity: truck.capacity,
+        }
+    }
+}

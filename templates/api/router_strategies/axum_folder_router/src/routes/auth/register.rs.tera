@@ -1,0 +1,36 @@
+use axum::{
+    extract::State,
+    Json,
+    http::StatusCode,
+};
+use crate::di::app_state::AppState;
+use crate::error::AppError;
+use crate::dto::user_requests::{RegisterUserRequest, UserResponse};
+use validator::Validate;
+use std::sync::Arc;
+
+#[utoipa::path(
+    post,
+    path = "/api/auth/register",
+    request_body = RegisterUserRequest,
+    responses(
+        (status = 201, description = "User registered successfully", body = UserResponse),
+        (status = 400, description = "Bad Request - Validation error or user already exists", body = AppError),
+        (status = 500, description = "Internal Server Error", body = AppError)
+    ),
+    tag = "Auth"
+)]
+pub async fn handler(
+    State(app_state): State<Arc<AppState>>,
+    Json(payload): Json<RegisterUserRequest>,
+) -> Result<(StatusCode, Json<UserResponse>), AppError> {
+    payload.validate()?;
+
+    // Convert DTO to command
+    let command = payload.into();
+
+    // Register user through the service
+    let user = app_state.user_service.register_user(command).await?;
+
+    Ok((StatusCode::CREATED, Json(user.into())))
+}

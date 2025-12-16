@@ -1,0 +1,22 @@
+[package]
+name = "core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# Dependencies from workspace Cargo.toml
+anyhow = { workspace = true }
+thiserror = "1.0"
+serde = { workspace = true, features = ["derive"] }
+validator = { workspace = true, features = ["derive"] }
+async-trait = { workspace = true } 
+chrono = { workspace = true, optional = true, features = ["serde"] } # Optional
+
+# Add any core-specific dependencies here (e.g., uuid if not from chrono/db)
+
+[features]
+default = []
+test-utils = [] # For mocking/testing ports implementations

@@ -1,0 +1,53 @@
+use axum::{
+    extract::{State, Path},
+    Json,
+    http::StatusCode,
+};
+use crate::di::app_state::AppState;
+use crate::error::AppError;
+use crate::dto::user_requests::{RegisterUserRequest, UserResponse};
+use domain::domain::user::UserId;
+use validator::Validate;
+use std::sync::Arc;
+
+#[utoipa::path(
+    post,
+    path = "/api/users",
+    request_body = RegisterUserRequest,
+    responses(
+        (status = 201, description = "User registered successfully", body = UserResponse),
+        (status = 400, description = "Bad Request", body = AppError),
+        (status = 500, description = "Internal Server Error", body = AppError)
+    ),
+    tag = "User"
+)]
+pub async fn register_user(
+    State(app_state): State<Arc<AppState>>,
+    Json(payload): Json<RegisterUserRequest>,
+) -> Result<(StatusCode, Json<UserResponse>), AppError> {
+    payload.validate()?;
+    let command = payload.into();
+    let user = app_state.user_service.register_user(command).await?;
+    Ok((StatusCode::CREATED, Json(user.into())))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/users/{id}",
+    params(
+        ("id" = u64, Path, description = "User ID")
+    ),
+    responses(
+        (status = 200, description = "User profile", body = UserResponse),
+        (status = 404, description = "User not found", body = AppError),
+        (status = 500, description = "Internal Server Error", body = AppError)
+    ),
+    tag = "User"
+)]
+pub async fn get_user_by_id(
+    State(app_state): State<Arc<AppState>>,
+    Path(id): Path<u64>,
+) -> Result<Json<UserResponse>, AppError> {
+    let user_profile = app_state.user_service.get_user_profile(UserId(id)).await?;
+    Ok(Json(user_profile.into()))
+}

@@ -1,0 +1,17 @@
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum DomainError {
+    #[error("User not found: {0}")]
+    UserNotFound(String),
+    #[error("Truck not found: {0}")]
+    TruckNotFound(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+    #[error("Unauthorized access")]
+    Unauthorized,
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+    #[error("Internal error: {0}")]
+    InternalError(String),
+}

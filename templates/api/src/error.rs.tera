@@ -1,0 +1,190 @@
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
+use serde::Serialize;
+use domain::domain::error::DomainError; // Import DomainError
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProblemDetail {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "type")]
+    pub type_uri: Option<String>,
+    pub title: String,
+    pub status: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instance: Option<String>,
+    // Potremmo aggiungere un campo per errori specifici di validazione (es. `errors: Vec<FieldError>`)
+}
+
+#[derive(Debug)]
+pub enum AppError {
+    InternalServerError(Option<anyhow::Error>),
+    BadRequest(String),
+    Unauthorized,
+    NotFound,
+    Forbidden,
+    // Add more specific errors mapping from domain errors
+    Domain(DomainError),
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let (status_code, problem_detail) = match self {
+            AppError::InternalServerError(err) => {
+                // Log the internal error for debugging, but don't expose sensitive info to client
+                if let Some(e) = err {
+                    tracing::error!("Internal server error: {:?}", e);
+                }
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    ProblemDetail {
+                        type_uri: Some("/errors/internal-server-error".to_string()),
+                        title: "Internal Server Error".to_string(),
+                        status: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+                        detail: Some("An unexpected error occurred.".to_string()),
+                        instance: None,
+                    },
+                )
+            }
+            AppError::BadRequest(msg) => (
+                StatusCode::BAD_REQUEST,
+                ProblemDetail {
+                    type_uri: Some("/errors/bad-request".to_string()),
+                    title: "Bad Request".to_string(),
+                    status: StatusCode::BAD_REQUEST.as_u16(),
+                    detail: Some(msg),
+                    instance: None,
+                },
+            ),
+            AppError::Unauthorized => (
+                StatusCode::UNAUTHORIZED,
+                ProblemDetail {
+                    type_uri: Some("/errors/unauthorized".to_string()),
+                    title: "Unauthorized".to_string(),
+                    status: StatusCode::UNAUTHORIZED.as_u16(),
+                    detail: Some("Authentication required or invalid credentials.".to_string()),
+                    instance: None,
+                },
+            ),
+            AppError::NotFound => (
+                StatusCode::NOT_FOUND,
+                ProblemDetail {
+                    type_uri: Some("/errors/not-found".to_string()),
+                    title: "Not Found".to_string(),
+                    status: StatusCode::NOT_FOUND.as_u16(),
+                    detail: Some("The requested resource was not found.".to_string()),
+                    instance: None,
+                },
+            ),
+            AppError::Forbidden => (
+                StatusCode::FORBIDDEN,
+                ProblemDetail {
+                    type_uri: Some("/errors/forbidden".to_string()),
+                    title: "Forbidden".to_string(),
+                    status: StatusCode::FORBIDDEN.as_u16(),
+                    detail: Some("You do not have permission to access this resource.".to_string()),
+                    instance: None,
+                },
+            ),
+            AppError::Domain(domain_error) => match domain_error {
+                DomainError::UserNotFound(msg) => (
+                    StatusCode::NOT_FOUND,
+                    ProblemDetail {
+                        type_uri: Some("/errors/user-not-found".to_string()),
+                        title: "User Not Found".to_string(),
+                        status: StatusCode::NOT_FOUND.as_u16(),
+                        detail: Some(msg),
+                        instance: None,
+                    },
+                ),
+                DomainError::TruckNotFound(msg) => (
+                    StatusCode::NOT_FOUND,
+                    ProblemDetail {
+                        type_uri: Some("/errors/truck-not-found".to_string()),
+                        title: "Truck Not Found".to_string(),
+                        status: StatusCode::NOT_FOUND.as_u16(),
+                        detail: Some(msg),
+                        instance: None,
+                    },
+                ),
+                DomainError::ValidationError(msg) => (
+                    StatusCode::BAD_REQUEST,
+                    ProblemDetail {
+                        type_uri: Some("/errors/validation-failed".to_string()),
+                        title: "Validation Failed".to_string(),
+                        status: StatusCode::BAD_REQUEST.as_u16(),
+                        detail: Some(msg),
+                        instance: None,
+                    },
+                ),
+                DomainError::Unauthorized => (
+                    StatusCode::UNAUTHORIZED,
+                    ProblemDetail {
+                        type_uri: Some("/errors/domain-unauthorized".to_string()),
+                        title: "Unauthorized".to_string(),
+                        status: StatusCode::UNAUTHORIZED.as_u16(),
+                        detail: Some("Authentication failed at domain level.".to_string()),
+                        instance: None,
+                    },
+                ),
+                DomainError::DatabaseError(msg) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    ProblemDetail {
+                        type_uri: Some("/errors/database-error".to_string()),
+                        title: "Database Error".to_string(),
+                        status: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+                        detail: Some(msg),
+                        instance: None,
+                    },
+                ),
+                DomainError::InternalError(msg) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    ProblemDetail {
+                        type_uri: Some("/errors/domain-internal-error".to_string()),
+                        title: "Domain Internal Error".to_string(),
+                        status: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+                        detail: Some(msg),
+                        instance: None,
+                    },
+                ),
+            },
+        };
+
+        (status_code, Json(problem_detail)).into_response()
+    }
+}
+
+// Converte anyhow::Error in AppError per una gestione centralizzata
+impl From<anyhow::Error> for AppError {
+    fn from(err: anyhow::Error) -> Self {
+        AppError::InternalServerError(Some(err))
+    }
+}
+
+// Converte validator::ValidationErrors in AppError::BadRequest
+impl From<validator::ValidationErrors> for AppError {
+    fn from(errors: validator::ValidationErrors) -> Self {
+        AppError::BadRequest(format!("Validation failed: {}", errors))
+    }
+}
+
+// Converte DomainError in AppError
+impl From<DomainError> for AppError {
+    fn from(err: DomainError) -> Self {
+        AppError::Domain(err)
+    }
+}
+
+// Convertire eventuali errori di jwt in AppError
+// Uncomment if you add jwt as a feature in Cargo.toml
+// #[cfg(feature = "jwt")]
+// impl From<jsonwebtoken::errors::Error> for AppError {
+//     fn from(err: jsonwebtoken::errors::Error) -> Self {
+//         AppError::Unauthorized // Or more specific error
+//     }
+// }

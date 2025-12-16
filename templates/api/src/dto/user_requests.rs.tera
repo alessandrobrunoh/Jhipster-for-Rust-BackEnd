@@ -1,0 +1,65 @@
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+use domain::domain::user::User;
+use application::commands::register_user_cmd::RegisterUserCommand;
+use application::query::user_profile_query::UserProfileQuery;
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct RegisterUserRequest {
+    #[validate(length(min = 3, max = 50))]
+    pub username: String,
+    #[validate(email)]
+    pub email: String,
+    #[validate(length(min = 8))]
+    pub password: String,
+}
+
+impl From<RegisterUserRequest> for RegisterUserCommand {
+    fn from(req: RegisterUserRequest) -> Self {
+        RegisterUserCommand {
+            username: req.username,
+            email: req.email,
+            password: req.password,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct UserResponse {
+    pub id: u64,
+    pub username: String,
+    pub email: String,
+}
+
+impl From<User> for UserResponse {
+    fn from(user: User) -> Self {
+        UserResponse {
+            id: user.id.0,
+            username: user.username,
+            email: user.email,
+        }
+    }
+}
+
+impl From<UserProfileQuery> for UserResponse {
+    fn from(query: UserProfileQuery) -> Self {
+        UserResponse {
+            id: query.id,
+            username: query.username,
+            email: query.email,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct UserLoginRequest {
+    #[validate(length(min = 3))]
+    pub username: String,
+    #[validate(length(min = 1))]
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct UserTokenResponse {
+    pub token: String,
+}

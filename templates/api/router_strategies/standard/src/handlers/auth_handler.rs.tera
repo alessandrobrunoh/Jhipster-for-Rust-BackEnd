@@ -1,0 +1,85 @@
+use axum::{
+    extract::State,
+    Json,
+    Router,
+    routing::post,
+    http::StatusCode,
+};
+use crate::di::app_state::AppState;
+use crate::error::AppError;
+use crate::dto::user_requests::LoginVM; // Assuming LoginVM is still valid
+use application::services::user_service::UserService; // To be used for actual auth
+
+{% if authentication == "jwt" %}
+use jsonwebtoken::{encode, Header, EncodingKey};
+use chrono::{Utc, Duration};
+use crate::security::jwt::{Claims, create_token};
+use infrastructure::config::init_env; // To get JWT secret from .env
+{% endif %}
+use std::sync::Arc;
+
+pub fn router() -> Router<AppState> {
+    Router::new()
+        .route("/authenticate", post(login))
+        .route("/register", post(register))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/authenticate",
+    request_body = LoginVM,
+    responses(
+        (status = 200, description = "Login successful", body = JWTToken),
+        (status = 401, description = "Unauthorized", body = AppError),
+        (status = 500, description = "Internal Server Error", body = AppError)
+    )
+)]
+pub async fn login(
+    State(_app_state): State<Arc<AppState>>, // Use app_state if needed for user service
+    Json(payload): Json<LoginVM>,
+) -> Result<Json<crate::dto::user_requests::JWTToken>, AppError> {
+    // Placeholder login logic
+    if payload.username == "admin" && payload.password == "admin" {
+        {% if authentication == "jwt" %}
+        let token = create_token(&payload.username, "ROLE_ADMIN")
+            .map_err(|_| AppError::InternalServerError(None))?; 
+        Ok(Json(crate::dto::user_requests::JWTToken { id_token: token }))
+        {% else %}
+        Ok(Json(crate::dto::user_requests::JWTToken { id_token: "basic-token".to_string() }))
+        {% endif %}
+    } else {
+        Err(AppError::Unauthorized)
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/register",
+    request_body = LoginVM,
+    responses(
+        (status = 201, description = "User created"),
+        (status = 400, description = "Bad Request", body = AppError),
+        (status = 500, description = "Internal Server Error", body = AppError)
+    )
+)]
+pub async fn register(
+    State(_app_state): State<Arc<AppState>>,
+    Json(_payload): Json<LoginVM>,
+) -> Result<StatusCode, AppError> {
+    // TODO: Hash password with Argon2 and save to DB via user_service
+    Ok(StatusCode::CREATED)
+}
+
+// Re-add LoginVM and JWTToken here, as they were defined in previous iteration in auth_resource.rs
+// Now they should live in dto/user_requests.rs
+// Temporarily define here for compilation if not yet moved
+#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
+pub struct LoginVM {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct JWTToken {
+    pub id_token: String,
+}

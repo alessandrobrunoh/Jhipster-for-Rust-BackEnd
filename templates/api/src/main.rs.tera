@@ -1,0 +1,43 @@
+use std::sync::Arc;
+use infrastructure::config::init_env; // Use infrastructure's config
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tokio::net::TcpListener;
+use api::router::create_router; // Import create_router
+use api::di::app_state::AppState; // Import AppState
+
+
+
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Initialize environment variables from .env
+    init_env()?;
+
+    // Initialize tracing (logging)
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
+    tracing::info!("Starting up application...");
+
+    // Build the AppState (Dependency Injection Container)
+    let app_state = Arc::new(AppState::build().await?);
+
+    // Create the Axum router
+    let app = create_router(app_state);
+
+    // UI Log
+    {% if api_ui == "swagger" %}
+    tracing::info!("Swagger UI available at http://localhost:8080/swagger-ui");
+    {% elif api_ui == "scalar" %}
+    tracing::info!("Scalar UI available at http://localhost:8080/scalar");
+    {% endif %}
+
+    let listener = TcpListener::bind("0.0.0.0:8080").await?;
+    tracing::info!("listening on {}", listener.local_addr()?);
+
+    axum::serve(listener, app).await?;
+
+    Ok(())
+}

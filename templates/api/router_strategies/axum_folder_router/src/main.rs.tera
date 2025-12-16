@@ -1,0 +1,37 @@
+use std::sync::Arc;
+use tokio::net::TcpListener;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+use api::di::app_state::AppState;
+use api::routes::create_router;
+use infrastructure::config::init_env;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Initialize environment variables from .env
+    init_env()?;
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "api=debug,tower_http=debug".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
+    tracing::info!("Starting up application...");
+
+    // Initialize AppState (DI Container)
+    let app_state = Arc::new(AppState::build().await?);
+
+    // Build Axum Router from folder structure
+    let app = create_router(app_state);
+
+    let listener = TcpListener::bind("0.0.0.0:8080").await?;
+    tracing::info!("Server listening on {}", listener.local_addr()?);
+    tracing::info!("Scalar API documentation available at http://localhost:8080/scalar");
+
+    axum::serve(listener, app).await?;
+
+    Ok(())
+}

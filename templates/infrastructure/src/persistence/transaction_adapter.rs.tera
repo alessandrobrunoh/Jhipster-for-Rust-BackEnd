@@ -1,0 +1,93 @@
+use domain::domain::error::DomainError;
+use domain::ports::transaction_manager::TransactionManager;
+use async_trait::async_trait;
+use anyhow::Result;
+use std::sync::Arc;
+
+{% if orm == "sqlx" %}
+use super::db_connection::DbPool;
+{% elif orm == "diesel" %}
+// Diesel transactions are usually managed via connection, difficult to abstract this way without a connection manager
+// Placeholder implementation
+{% elif orm == "seaorm" %}
+use sea_orm::{DatabaseTransaction, TransactionTrait};
+use super::db_connection::DatabaseConnection;
+{% elif database == "mongodb" %}
+use super::db_connection::Client;
+// Mongo transactions require replica set
+{% endif %}
+
+pub struct TransactionManagerImpl {
+    {% if orm == "sqlx" %}
+    #[allow(dead_code)]
+    pool: Arc<DbPool>,
+    // This is a naive implementation. Real transaction management across services requires passing the transaction context.
+    // Storing it in the struct is tricky for concurrent requests if the struct is shared.
+    // Typically, the transaction is part of the "Unit of Work" or request context.
+    // For this simple example, we might not fully implement shared transactions or assume scoped usage.
+    // However, since TransactionManager is Arc<dyn>, it's shared.
+    // WE CANNOT STORE STATE here for request-scoped transactions without something like task-local storage or passing context.
+
+    // For the sake of compiling and basic "Unit of Work" pattern where a new Service/Manager is created per request (which we aren't doing yet fully),
+    // we'll leave placeholders or simple implementation.
+
+    // BETTER: TransactionManager should perhaps just be a factory or facade?
+    // Given the constraints, we will implement methods that just operate on the pool or a dummy implementation
+    // if we can't easily share the transaction handle.
+
+    // But wait, the ports define begin/commit/rollback. This implies state.
+    // If TransactionManager is a singleton, this is impossible safely.
+    // TransactionManager needs to be scoped (per request).
+
+    // Assuming for now we are NOT using it correctly in the generated code (creating new service per request),
+    // or we accept that this `TransactionManagerImpl` might need to be instantiated per request.
+    // Our `AppState` shares it. This is a design flaw in the generated template's transaction strategy.
+
+    // To fix compilation:
+
+    {% elif orm == "diesel" %}
+    #[allow(dead_code)]
+    _pool: Arc<super::db_connection::DbPool>,
+    {% elif orm == "seaorm" %}
+    #[allow(dead_code)]
+    db: Arc<DatabaseConnection>,
+    {% elif database == "mongodb" %}
+    #[allow(dead_code)]
+    client: Arc<Client>,
+    {% endif %}
+}
+
+impl TransactionManagerImpl {
+    pub fn new(
+        {% if orm == "sqlx" %}pool: Arc<DbPool>{% elif orm == "diesel" %}pool: Arc<super::db_connection::DbPool>{% elif orm == "seaorm" %}db: Arc<DatabaseConnection>{% elif database == "mongodb" %}client: Arc<Client>{% endif %}
+    ) -> Self {
+        Self {
+            {% if orm == "sqlx" %}pool
+            {% elif orm == "diesel" %}_pool: pool
+            {% elif orm == "seaorm" %}db
+            {% elif database == "mongodb" %}client{% endif %}
+        }
+    }
+}
+
+#[async_trait]
+impl TransactionManager for TransactionManagerImpl {
+    async fn begin_transaction(&self) -> Result<(), DomainError> {
+        // Real implementation requires Thread Local Storage or passing context
+        // For this template, we will log and return Ok to allow compilation and basic running
+        // effectively making it a no-op transaction manager for now.
+        // Implementing full async transaction management is complex.
+        println!("Transaction begin called (No-op in this template)");
+        Ok(())
+    }
+
+    async fn commit_transaction(&self) -> Result<(), DomainError> {
+        println!("Transaction commit called (No-op)");
+        Ok(())
+    }
+
+    async fn rollback_transaction(&self) -> Result<(), DomainError> {
+        println!("Transaction rollback called (No-op)");
+        Ok(())
+    }
+}

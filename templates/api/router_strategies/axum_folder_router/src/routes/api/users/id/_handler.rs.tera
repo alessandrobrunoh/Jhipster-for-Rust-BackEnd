@@ -1,0 +1,38 @@
+use axum::{
+    extract::{State, Path},
+    Json,
+    Router,
+    routing::get,
+};
+use crate::di::app_state::AppState;
+use crate::error::AppError;
+use crate::dto::user_requests::UserResponse;
+use domain::domain::user::UserId;
+use std::sync::Arc;
+
+#[utoipa::path(
+    get,
+    path = "/api/users/{id}",
+    params(
+        ("id" = u64, Path, description = "User ID")
+    ),
+    responses(
+        (status = 200, description = "User profile", body = UserResponse),
+        (status = 404, description = "User not found", body = AppError),
+        (status = 500, description = "Internal Server Error", body = AppError)
+    ),
+    tag = "User"
+)]
+pub async fn get_user_by_id(
+    State(app_state): State<Arc<AppState>>,
+    Path(id): Path<u64>,
+) -> Result<Json<UserResponse>, AppError> {
+    let user_profile = app_state.user_service.get_user_profile(UserId(id)).await?;
+    Ok(Json(user_profile.into()))
+}
+
+pub fn create_routes(app_state: Arc<AppState>) -> Router {
+    Router::new()
+        .route("/api/users/:id", get(get_user_by_id))
+        .with_state(app_state)
+}

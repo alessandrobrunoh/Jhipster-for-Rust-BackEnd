@@ -1,0 +1,49 @@
+use axum::{
+    extract::State,
+    Json,
+};
+use crate::di::app_state::AppState;
+use crate::error::AppError;
+use crate::dto::user_requests::{UserLoginRequest, UserTokenResponse};
+use validator::Validate;
+use std::sync::Arc;
+
+#[utoipa::path(
+    post,
+    path = "/api/auth/login",
+    request_body = UserLoginRequest,
+    responses(
+        (status = 200, description = "User logged in successfully", body = UserTokenResponse),
+        (status = 401, description = "Unauthorized", body = AppError),
+        (status = 400, description = "Bad Request", body = AppError)
+    ),
+    tag = "Auth"
+)]
+pub async fn handler(
+    State(app_state): State<Arc<AppState>>,
+    Json(payload): Json<UserLoginRequest>,
+) -> Result<Json<UserTokenResponse>, AppError> {
+    payload.validate()?;
+
+    // Authenticate user - this is a placeholder implementation
+    // In a real application, you would:
+    // 1. Find the user by username
+    // 2. Verify the password using argon2 or bcrypt
+    // 3. Generate a JWT token with user claims
+
+    // For now, we'll use a simple token generation
+    let user = app_state.user_service
+        .find_user_by_username(&payload.username)
+        .await?;
+
+    // Verify password (placeholder - implement proper password verification)
+    // let is_valid = verify_password(&payload.password, &user.password_hash)?;
+    // if !is_valid {
+    //     return Err(AppError::Unauthorized);
+    // }
+
+    // Generate JWT token (placeholder - implement proper JWT generation)
+    let token = format!("jwt_token_for_user_{}", user.id.0);
+
+    Ok(Json(UserTokenResponse { token }))
+}

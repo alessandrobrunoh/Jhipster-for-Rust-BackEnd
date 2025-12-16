@@ -1,0 +1,102 @@
+# 🏗️ Project Architecture: {{ name }}
+
+This document explains the generated project structure and architectural decisions. This project uses a **multi-crate architecture** inspired by Clean Architecture / Domain-Driven Design principles.
+
+## 📦 Tech Stack
+
+- **Backend:** Rust + Axum
+- **Frontend:** {% if frontend == "react" %}Next.js (App Router){% else %}{{ frontend | capitalize }}{% endif %}
+- **Database:** {{ database | capitalize }}
+- **ORM:** {{ orm | capitalize }}
+- **Auth:** {{ auth_type | upper }}
+- **Router Strategy:** {{ router_strategy | capitalize }}
+- **API Documentation UI:** {{ api_ui | capitalize }}
+
+## 📂 Multi-Crate Directory Structure
+
+This project is organized into a Rust workspace with four main crates: `core`, `application`, `infrastructure`, and `api`.
+
+### 1. `core` Crate (The Pure Domain)
+**Purpose:** Contains the pure business domain logic. It should have no dependencies on external frameworks like Axum, SQLx, Diesel, or SeaORM. It defines the "what" of your business.
+
+-   `core/Cargo.toml`
+-   `core/src/`
+    -   `lib.rs`: Entry point for the core library.
+    -   `domain/`:
+        -   `user.rs`: Defines the `User` entity, value objects, and domain logic (`impl User { business_logic() }`).
+        -   `order.rs`: Other domain entities.
+        -   `error.rs`: Domain-specific error types (`DomainError`).
+    -   `ports/`:
+        -   `user_repository.rs`: Traits (interfaces) for data access operations related to `User`.
+        -   `transaction_manager.rs`: Trait for managing database transactions.
+
+### 2. `application` Crate (Application Logic)
+**Purpose:** Orchestrates the domain logic. It depends only on the `core` crate. It defines the "how" of your application's use cases.
+
+-   `application/Cargo.toml`
+-   `application/src/`
+    -   `lib.rs`: Entry point for the application library.
+    -   `services/`:
+        -   `register_user_handler.rs`: Implementations of use cases (command/query handlers).
+    -   `commands/`:
+        -   `register_user_cmd.rs`: Input DTOs (Commands) for application services.
+    -   `query/`:
+        -   `user_profile_query.rs`: Output DTOs (Queries) for application services.
+
+### 3. `infrastructure` Crate (Adapters and Technical Details)
+**Purpose:** Implements the "ports" (traits) defined in the `core` crate. It contains all the technical details like database drivers, external API clients, etc. It depends on `core` and `application`.
+
+-   `infrastructure/Cargo.toml`
+-   `infrastructure/src/`
+    -   `lib.rs`: Entry point for the infrastructure library.
+    -   `persistence/`:
+        -   `user_adapter.rs`: Implements `UserRepository` trait using specific ORM ({{ orm }}). Includes `impl From<DbUser> for core::User`.
+        -   `transaction_adapter.rs`: Implements `TransactionManager`.
+        -   `db_models.rs`: ORM-specific structs for database representation (`#[derive(sqlx::FromRow)]`).
+    -   `migrations/`: SQL migration files (or ORM-specific migration definitions).
+    -   `clients/`: Adapters for external services (e.g., Redis, Kafka, Email).
+        -   `email_client.rs`: Example client.
+    -   `config/`: Logic for loading environment variables (`dotenv`).
+
+### 4. `api` Crate (Axum Server and Delivery)
+**Purpose:** The entry point for the web server. It handles HTTP requests and responses, routing, and dependency injection. It depends on `application` and `infrastructure`.
+
+-   `api/Cargo.toml`
+-   `api/src/`
+    -   `main.rs`: Application startup, database connection, state building (Dependency Injection).
+    -   `di/`:
+        -   `app_state.rs`: `AppState` struct (DI container) - uses composition to group services.
+    -   `extractors/`:
+        -   `authenticated_user.rs`: Custom Axum extractors (e.g., JWT authentication).
+    -   `dto/`: HTTP-specific DTOs (JSON Request/Response models).
+        -   `user_requests.rs`.
+    -   `error.rs`: Centralized error handling implementing RFC 7807 (`AppError`).
+{% if router_strategy == "axumcontroller" %}
+    -   `controllers/`: Struct-based controllers using `axum-controller`.
+        -   `user_controller.rs`: Struct containing handler methods using `#[get("/")]`, `#[post("/")]` macros.
+    -   `router.rs`: Assembles controllers (e.g., `UserController::into_router()`).
+{% elif router_strategy == "axumfolderrouter" %}
+    -   `routes/`: File-system based routing structure.
+        -   `api/users/_handler.rs`: Maps to `/api/users`.
+{% else %}
+    -   `handlers/`: Raw Axum handler functions (`async fn`).
+    -   `router.rs`: Defines the Axum routes (e.g., `.route("/users", post(user_handler::...))`).
+{% endif %}
+
+## 🚀 Key Commands (from project root)
+
+-   `cargo build`: Builds the entire workspace.
+-   `cargo run -p api`: Runs the API server.
+-   `docker-compose up -d`: Starts the necessary infrastructure (database, etc.).
+{% if orm == "sqlx" %}
+-   `cargo install sqlx-cli` (if not installed)
+-   `sqlx database create`
+-   `sqlx migrate run`
+{% elif orm == "diesel" %}
+-   `cargo install diesel_cli --no-default-features --features "postgres"` (if not installed, adjust features)
+-   `diesel migration run`
+{% elif orm == "seaorm" %}
+-   `cargo install sea-orm-cli` (if not installed)
+-   `sea-orm-cli migrate up`
+{% endif %}
+-   `cd api/client && npm install && npm run dev`: Starts the frontend application.

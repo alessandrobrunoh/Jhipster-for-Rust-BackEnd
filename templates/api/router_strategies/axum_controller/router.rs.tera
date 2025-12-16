@@ -1,0 +1,90 @@
+use axum::{Router, Extension, response::IntoResponse, routing::{get, post, put, delete}};
+use axum::extract::MatchedPath;
+use axum::http::{Method, StatusCode};
+use std::sync::Arc;
+use utoipa::{OpenApi, Modify};
+use utoipa_scalar::{Scalar, Servable};
+
+use crate::di::app_state::AppState;
+use crate::error::AppError;
+use crate::controllers::{
+    user_controller::UserController,
+    auth_controller::AuthController,
+    truck_controller::TruckController,
+    health_controller::HealthController
+};
+use crate::dto::user_requests::{RegisterUserRequest, UserLoginRequest, UserResponse};
+use crate::dto::truck_requests::{CreateTruckRequest, TruckResponse};
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        UserController::register_user,
+        UserController::get_user_by_id,
+        AuthController::login,
+        HealthController::health_check,
+        TruckController::create_truck,
+        TruckController::get_truck,
+        TruckController::get_all_trucks,
+        TruckController::update_truck,
+        TruckController::delete_truck,
+    ),
+    components(
+        schemas(RegisterUserRequest, UserLoginRequest, UserResponse, CreateTruckRequest, TruckResponse, AppError)
+    ),
+    tags(
+        (name = "User", description = "User management endpoints"),
+        (name = "Auth", description = "Authentication endpoints"),
+        (name = "Truck", description = "Truck management endpoints"),
+        (name = "Health", description = "Health check endpoint")
+    ),
+    modifiers(&SecurityAddon)
+)]
+struct ApiDoc;
+
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi.components.as_mut().unwrap();
+        components.add_security_scheme(
+            "jwt_token",
+            utoipa::openapi::security::SecurityScheme::Http(
+                utoipa::openapi::security::HttpBuilder::new()
+                    .scheme(utoipa::openapi::security::HttpAuthScheme::Bearer)
+                    .bearer_format("JWT")
+                    .description(Some("JWT token for authentication"))
+                    .build(),
+            ),
+        );
+    }
+}
+
+
+pub fn create_router(app_state: Arc<AppState>) -> Router {
+    // Manual routing since we removed the macro magic
+    let api_router = Router::new()
+        .route("/api/users", post(UserController::register_user))
+        .route("/api/users/:id", get(UserController::get_user_by_id))
+        .route("/api/auth/login", post(AuthController::login))
+        .route("/api/trucks", post(TruckController::create_truck).get(TruckController::get_all_trucks))
+        .route("/api/trucks/:id", get(TruckController::get_truck).put(TruckController::update_truck).delete(TruckController::delete_truck))
+        .route("/health", get(HealthController::health_check));
+
+    let swagger_json = ApiDoc::openapi().to_json().unwrap();
+
+    Router::new()
+        .merge(api_router)
+        .merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
+        .route("/api-docs/openapi.json", get(|| async move { swagger_json }))
+        .with_state(app_state) // Use with_state instead of Extension for State extractor to work properly with Arc<AppState>
+        .fallback(handler_404)
+}
+
+async fn handler_404(method: Method, matched_path: Option<MatchedPath>) -> impl IntoResponse {
+    let path = matched_path.map_or_else(|| "unknown".to_string(), |p| p.as_str().to_string());
+    (
+        StatusCode::NOT_FOUND,
+        format!("API endpoint not found: {} {}", method, path),
+    )
+}

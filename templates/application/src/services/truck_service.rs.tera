@@ -1,0 +1,95 @@
+use domain::domain::truck::{Truck, TruckId};
+use domain::domain::error::DomainError;
+use domain::ports::truck_repository::TruckRepository;
+use domain::ports::transaction_manager::TransactionManager;
+use crate::commands::create_truck_cmd::CreateTruckCommand;
+use crate::query::truck_query::TruckQuery;
+use async_trait::async_trait;
+use std::sync::Arc;
+
+#[async_trait]
+pub trait TruckService: Send + Sync {
+    async fn create_truck(&self, cmd: CreateTruckCommand) -> Result<Truck, DomainError>;
+    async fn get_truck(&self, id: TruckId) -> Result<TruckQuery, DomainError>;
+    async fn get_all_trucks(&self) -> Result<Vec<TruckQuery>, DomainError>;
+    async fn update_truck(&self, id: TruckId, cmd: CreateTruckCommand) -> Result<Truck, DomainError>;
+    async fn delete_truck(&self, id: TruckId) -> Result<(), DomainError>;
+}
+
+pub struct TruckServiceImpl {
+    truck_repo: Arc<dyn TruckRepository>,
+    tx_manager: Arc<dyn TransactionManager>,
+}
+
+impl TruckServiceImpl {
+    pub fn new(truck_repo: Arc<dyn TruckRepository>, tx_manager: Arc<dyn TransactionManager>) -> Self {
+        Self { truck_repo, tx_manager }
+    }
+}
+
+#[async_trait]
+impl TruckService for TruckServiceImpl {
+    async fn create_truck(&self, cmd: CreateTruckCommand) -> Result<Truck, DomainError> {
+        self.tx_manager.begin_transaction().await?;
+        let new_truck = Truck::new(TruckId(0), cmd.license_plate, cmd.capacity); // ID will be set by repo
+        
+        match self.truck_repo.save(new_truck).await {
+            Ok(saved_truck) => {
+                self.tx_manager.commit_transaction().await?;
+                Ok(saved_truck)
+            },
+            Err(e) => {
+                self.tx_manager.rollback_transaction().await?;
+                Err(e)
+            }
+        }
+    }
+
+    async fn get_truck(&self, id: TruckId) -> Result<TruckQuery, DomainError> {
+        let truck = self.truck_repo.find_by_id(&id).await?
+            .ok_or_else(|| DomainError::TruckNotFound(id.0.to_string()))?;
+        Ok(TruckQuery::from(truck))
+    }
+
+    async fn get_all_trucks(&self) -> Result<Vec<TruckQuery>, DomainError> {
+        let trucks = self.truck_repo.find_all().await?;
+        Ok(trucks.into_iter().map(|t| TruckQuery::from(t)).collect())
+    }
+
+    async fn update_truck(&self, id: TruckId, cmd: CreateTruckCommand) -> Result<Truck, DomainError> {
+        self.tx_manager.begin_transaction().await?;
+        let maybe_truck = self.truck_repo.find_by_id(&id).await?;
+        
+        if let Some(mut truck) = maybe_truck {
+            truck.license_plate = cmd.license_plate;
+            truck.capacity = cmd.capacity;
+            match self.truck_repo.save(truck).await {
+                Ok(saved) => {
+                    self.tx_manager.commit_transaction().await?;
+                    Ok(saved)
+                },
+                Err(e) => {
+                    self.tx_manager.rollback_transaction().await?;
+                    Err(e)
+                }
+            }
+        } else {
+            self.tx_manager.rollback_transaction().await?;
+            Err(DomainError::TruckNotFound(id.0.to_string()))
+        }
+    }
+
+    async fn delete_truck(&self, id: TruckId) -> Result<(), DomainError> {
+        self.tx_manager.begin_transaction().await?;
+        match self.truck_repo.delete(&id).await {
+            Ok(_) => {
+                self.tx_manager.commit_transaction().await?;
+                Ok(())
+            },
+            Err(e) => {
+                self.tx_manager.rollback_transaction().await?;
+                Err(e)
+            }
+        }
+    }
+}

@@ -1,0 +1,68 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Navbar, Nav, NavItem, NavLink, Container, NavbarBrand } from 'reactstrap';
+import AuthService from '@/services/AuthService';
+import Link from 'next/link';
+
+const NavBar = () => {
+  const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    // Check auth on mount
+    setUser(AuthService.getCurrentUser());
+  }, []);
+
+  const handleLogout = () => {
+    AuthService.logout();
+    setUser(null);
+    router.push('/login');
+    router.refresh();
+  };
+
+  return (
+    <Navbar color="dark" dark expand="md">
+      <Container>
+        <Link href="/" passHref legacyBehavior>
+            <NavbarBrand>{{ name }}</NavbarBrand>
+        </Link>
+        <Nav className="ml-auto" navbar>
+          <NavItem>
+            <Link href="/" passHref legacyBehavior>
+                <NavLink>Home</NavLink>
+            </Link>
+          </NavItem>
+          {user && (
+            <NavItem>
+              <Link href="/trucks" passHref legacyBehavior>
+                <NavLink>Trucks</NavLink>
+              </Link>
+            </NavItem>
+          )}
+          {!user ? (
+            <>
+              <NavItem>
+                <Link href="/login" passHref legacyBehavior>
+                  <NavLink>Login</NavLink>
+                </Link>
+              </NavItem>
+              <NavItem>
+                <Link href="/register" passHref legacyBehavior>
+                  <NavLink>Register</NavLink>
+                </Link>
+              </NavItem>
+            </>
+          ) : (
+            <NavItem>
+              <NavLink onClick={handleLogout} style={{ "{{ cursor: 'pointer' }}" }}>Logout</NavLink>
+            </NavItem>
+          )}
+        </Nav>
+      </Container>
+    </Navbar>
+  );
+};
+
+export default NavBar;

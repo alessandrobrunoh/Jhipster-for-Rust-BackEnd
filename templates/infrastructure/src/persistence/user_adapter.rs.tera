@@ -1,0 +1,241 @@
+use domain::domain::user::{User, UserId};
+use domain::domain::error::DomainError;
+use domain::ports::user_repository::UserRepository;
+use async_trait::async_trait;
+use anyhow::Result;
+{% if orm == "diesel" %}
+use anyhow::Context;
+{% endif %}
+use std::sync::Arc;
+
+use super::db_models::{UserDb{% if orm == "diesel" %}, NewUserDb{% elif orm == "seaorm" %}, ActiveModel{% endif %}};
+
+{% if orm == "sqlx" %}
+use super::db_connection::DbPool;
+{% elif orm == "diesel" %}
+use super::db_connection::{DbPool, PooledDb};
+use diesel::prelude::*;
+use diesel::insert_into;
+use super::schema::users;
+{% elif orm == "seaorm" %}
+use super::db_connection::DatabaseConnection;
+use sea_orm::{ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait, ActiveValue::Set};
+use super::entities::users::{Entity as UserEntity, Model as UserModel}; // Assuming sea-orm generates entities/users.rs
+{% elif database == "mongodb" %}
+use super::db_connection::Client;
+use mongodb::{bson::doc, options::FindOneOptions};
+use futures::TryStreamExt;
+{% endif %}
+
+
+pub struct UserRepositoryImpl {
+    {% if orm == "sqlx" %}
+    pool: Arc<DbPool>,
+    {% elif orm == "diesel" %}
+    pool: Arc<DbPool>,
+    {% elif orm == "seaorm" %}
+    db: Arc<DatabaseConnection>,
+    {% elif database == "mongodb" %}
+    client: Arc<Client>,
+    {% endif %}
+}
+
+impl UserRepositoryImpl {
+    pub fn new(
+        {% if orm == "sqlx" %}pool: Arc<DbPool>{% elif orm == "diesel" %}pool: Arc<DbPool>{% elif orm == "seaorm" %}db: Arc<DatabaseConnection>{% elif database == "mongodb" %}client: Arc<Client>{% endif %}
+    ) -> Self {
+        Self { {% if orm == "sqlx" %}pool{% elif orm == "diesel" %}pool{% elif orm == "seaorm" %}db{% elif database == "mongodb" %}client{% endif %} }
+    }
+}
+
+#[async_trait]
+impl UserRepository for UserRepositoryImpl {
+    async fn find_by_id(&self, id: &UserId) -> Result<Option<User>, DomainError> {
+        {% if orm == "sqlx" %}
+        let res = sqlx::query_as::<_, UserDb>("SELECT id, username, email, password_hash FROM users WHERE id = $1")
+            .bind(id.0 as i64)
+            .fetch_optional(&*self.pool)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map(|db_user| db_user.into());
+        Ok(res)
+        {% elif orm == "diesel" %}
+        let mut conn: PooledDb = self.pool.get().context("Failed to get Diesel connection").map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        let res = users::table.filter(users::id.eq(id.0 as i64))
+            .first::<UserDb>(&mut conn)
+            .optional()
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map(|db_user| db_user.into());
+        Ok(res)
+        {% elif orm == "seaorm" %}
+        let res = UserEntity::find_by_id(id.0 as i64)
+            .one(&*self.db)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map(|model| model.into());
+        Ok(res)
+        {% elif database == "mongodb" %}
+        let collection = self.client.database("{{ name | replace(from="-", to="_") }}_db").collection::<UserDb>("users");
+        let options = FindOneOptions::builder().build();
+        let res = collection.find_one(doc! {"_id": id.0 as i64}, options)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map(|db_user| db_user.into());
+        Ok(res)
+        {% else %}
+        // Placeholder for other ORMs/databases
+        unimplemented!()
+        {% endif %}
+    }
+
+    async fn find_by_username(&self, username: &str) -> Result<Option<User>, DomainError> {
+        {% if orm == "sqlx" %}
+        let res = sqlx::query_as::<_, UserDb>("SELECT id, username, email, password_hash FROM users WHERE username = $1")
+            .bind(username)
+            .fetch_optional(&*self.pool)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map(|db_user| db_user.into());
+        Ok(res)
+        {% elif orm == "diesel" %}
+        let mut conn: PooledDb = self.pool.get().context("Failed to get Diesel connection").map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        let res = users::table.filter(users::username.eq(username))
+            .first::<UserDb>(&mut conn)
+            .optional()
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map(|db_user| db_user.into());
+        Ok(res)
+        {% elif orm == "seaorm" %}
+        let res = UserEntity::find()
+            .filter(users::Column::Username.eq(username))
+            .one(&*self.db)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map(|model| model.into());
+        Ok(res)
+        {% elif database == "mongodb" %}
+        let collection = self.client.database("{{ name | replace(from="-", to="_") }}_db").collection::<UserDb>("users");
+        let options = FindOneOptions::builder().build();
+        let res = collection.find_one(doc! {"username": username}, options)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map(|db_user| db_user.into());
+        Ok(res)
+        {% else %}
+        unimplemented!()
+        {% endif %}
+    }
+
+    async fn save(&self, user: User) -> Result<User, DomainError> {
+        {% if orm == "sqlx" %}
+        // If user.id is 0, it's a new user, otherwise update
+        if user.id.0 == 0 {
+            let inserted = sqlx::query_as::<_, UserDb>("INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, password_hash")
+                .bind(user.username)
+                .bind(user.email)
+                .bind("TODO_HASH")
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            Ok(inserted.into())
+        } else {
+            let updated = sqlx::query_as::<_, UserDb>("UPDATE users SET username = $1, email = $2 WHERE id = $3 RETURNING id, username, email, password_hash")
+                .bind(user.username)
+                .bind(user.email)
+                .bind(user.id.0 as i64)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            Ok(updated.into())
+        }
+        {% elif orm == "diesel" %}
+        let mut conn: PooledDb = self.pool.get().context("Failed to get Diesel connection").map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        if user.id.0 == 0 {
+            let new_user_db = NewUserDb {
+                username: user.username,
+                email: user.email,
+                password_hash: "TODO_HASH".to_string(),
+            };
+            insert_into(users::table)
+                .values(&new_user_db)
+                .get_result::<UserDb>(&mut conn)
+                .map_err(|e| DomainError::DatabaseError(e.to_string()))
+                .map(|db_user| db_user.into())
+                .map_err(|e| DomainError::InternalError(format!("Failed to convert UserDb to User: {}", e)))
+        } else {
+            let updated_user_db = UserDb {
+                id: user.id.0 as i64,
+                username: user.username,
+                email: user.email,
+                password_hash: "TODO_HASH".to_string(), // Keep original hash or update
+            };
+            diesel::update(users::table.filter(users::id.eq(user.id.0 as i64)))
+                .set(&updated_user_db)
+                .get_result::<UserDb>(&mut conn)
+                .map_err(|e| DomainError::DatabaseError(e.to_string()))
+                .map(|db_user| db_user.into())
+                .map_err(|e| DomainError::InternalError(format!("Failed to convert UserDb to User: {}", e)))
+        }
+        {% elif orm == "seaorm" %}
+        let user_model: UserModel = user.clone().into(); // Assuming conversion is possible
+        let active_model: ActiveModel = user.into();
+        let saved_model = active_model.save(&*self.db)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        Ok(saved_model.into_model().into())
+        {% elif database == "mongodb" %}
+        let collection = self.client.database("{{ name | replace(from="-", to="_") }}_db").collection::<UserDb>("users");
+        let new_user_db = UserDb {
+            id: None,
+            username: user.username.clone(),
+            email: user.email.clone(),
+            password_hash: "TODO_HASH".to_string(),
+            created_at: mongodb::bson::DateTime::now(),
+            updated_at: mongodb::bson::DateTime::now(),
+        };
+        collection.insert_one(new_user_db, None)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        // Mongo returns ObjectId, need to fetch again to get full UserDb or construct from input
+        self.find_by_username(&user.username).await?.ok_or_else(|| DomainError::InternalError("Failed to retrieve saved user".to_string()))
+        {% else %}
+        unimplemented!()
+        {% endif %}
+    }
+
+    async fn delete(&self, id: &UserId) -> Result<(), DomainError> {
+        {% if orm == "sqlx" %}
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(id.0 as i64)
+            .execute(&*self.pool)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        Ok(())
+        {% elif orm == "diesel" %}
+        let mut conn: PooledDb = self.pool.get().context("Failed to get Diesel connection").map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        diesel::delete(users::table.filter(users::id.eq(id.0 as i64)))
+            .execute(&mut conn)
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        Ok(())
+        {% elif orm == "seaorm" %}
+        let user: ActiveModel = UserEntity::find_by_id(id.0 as i64)
+            .one(&*self.db)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .ok_or_else(|| DomainError::UserNotFound(id.0.to_string()))?
+            .into_active_model();
+        user.delete(&*self.db)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        Ok(())
+        {% elif database == "mongodb" %}
+        let collection = self.client.database("{{ name | replace(from="-", to="_") }}_db").collection::<UserDb>("users");
+        collection.delete_one(doc! {"_id": id.0 as i64}, None)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        Ok(())
+        {% else %}
+        unimplemented!()
+        {% endif %}
+    }
+}

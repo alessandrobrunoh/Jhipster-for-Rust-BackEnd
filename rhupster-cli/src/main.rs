@@ -1,12 +1,15 @@
 use anyhow::Result;
 use clap::Parser;
 use console::style;
-use rhupster_core::generator::Generator;
+use rhupster_core::generator::{Generator, TemplateSource};
 use std::env;
 use std::path::PathBuf;
+use include_dir::{include_dir, Dir};
 
 mod prompts;
 use prompts::PromptService;
+
+static TEMPLATES: Dir = include_dir!("$CARGO_MANIFEST_DIR/../templates");
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -44,7 +47,15 @@ async fn main() -> Result<()> {
         args.output
     };
 
-    let generator = Generator::new(config, args.templates);
+    let template_source = if args.templates.exists() {
+        println!("Using local templates from: {}", args.templates.display());
+        TemplateSource::Path(args.templates)
+    } else {
+        println!("Using embedded templates.");
+        TemplateSource::Embedded(&TEMPLATES)
+    };
+
+    let generator = Generator::new(config, template_source);
     generator.generate(&output_path).await?;
 
     println!("\n{}", style("Success! Project generated.").bold().green());

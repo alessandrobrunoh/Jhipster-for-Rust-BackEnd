@@ -1,0 +1,45 @@
+[package]
+name = "api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Dependencies from workspace Cargo.toml
+application = { path = "../application" }
+infrastructure = { path = "../infrastructure" }
+domain = { path = "../core", package = "core" } # Core as well for direct domain types in DTOs
+
+axum = { workspace = true } # Removed macros here, added to specific controllers
+tokio = { workspace = true, features = ["full"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+validator = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+
+# API Documentation
+utoipa = { workspace = true }
+utoipa-scalar = { workspace = true }
+
+
+# Router Strategy
+# Manual wiring for controllers (simulated controller pattern)
+
+
+# Auth
+jsonwebtoken = "9.2"
+argon2 = "0.5"
+
+# Redis - if needed directly in API or for AppState
+
+[lib]
+path = "src/lib.rs"
+
+# For bin target
+[[bin]]
+name = "api"
+path = "src/main.rs"

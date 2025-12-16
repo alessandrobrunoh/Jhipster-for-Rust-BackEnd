@@ -1,0 +1,106 @@
+use axum::{Router, middleware};
+use crate::di::app_state::AppState;
+use std::sync::Arc;
+
+// OpenAPI
+use utoipa::OpenApi;
+{% if api_ui == "swagger" %}
+use utoipa_swagger_ui::SwaggerUi;
+{% elif api_ui == "scalar" %}
+use utoipa_scalar::{Scalar, ScalarDocs};
+{% endif %}
+
+use crate::error::ProblemDetail;
+use crate::dto::user_requests::{LoginVM, JWTToken, RegisterUserRequest, UserResponse};
+use crate::dto::truck_requests::{CreateTruckRequest, TruckResponse};
+use domain::domain::user::{User, UserId}; // For OpenAPI schemas
+use domain::domain::truck::{Truck, TruckId}; // For OpenAPI schemas
+
+
+#[derive(OpenApi)]
+#[openapi(
+    {% if router_strategy == "Standard" %}
+    paths(
+        router_strategies::standard::handlers::health_handler::health_check,
+        router_strategies::standard::handlers::auth_handler::login,
+        router_strategies::standard::handlers::auth_handler::register,
+        router_strategies::standard::handlers::user_handler::register_user,
+        router_strategies::standard::handlers::user_handler::get_user_by_id,
+        router_strategies::standard::handlers::truck_handler::create_truck,
+        router_strategies::standard::handlers::truck_handler::get_all_trucks,
+        router_strategies::standard::handlers::truck_handler::get_truck_by_id,
+    ),
+    {% elif router_strategy == "AxumController" %}
+    paths(
+        router_strategies::axum_controller::controllers::health_controller::HealthController::health_check,
+        router_strategies::axum_controller::controllers::auth_controller::AuthController::login,
+        router_strategies::axum_controller::controllers::auth_controller::AuthController::register,
+        router_strategies::axum_controller::controllers::user_controller::UserController::register_user,
+        router_strategies::axum_controller::controllers::user_controller::UserController::get_user_by_id,
+        router_strategies::axum_controller::controllers::truck_controller::TruckController::create_truck,
+        router_strategies::axum_controller::controllers::truck_controller::TruckController::get_all_trucks,
+        router_strategies::axum_controller::controllers::truck_controller::TruckController::get_truck_by_id,
+    ),
+    {% elif router_strategy == "AxumFolderRouter" %}
+    paths(
+        router_strategies::axum_folder_router::routes::health::health_check,
+        router_strategies::axum_folder_router::routes::auth::login::login,
+        router_strategies::axum_folder_router::routes::auth::register::register,
+        router_strategies::axum_folder_router::routes::api::users::_handler::register_user,
+        router_strategies::axum_folder_router::routes::api::users::_handler::get_all_users, // Assuming this exists
+        router_strategies::axum_folder_router::routes::api::users::id::_handler::get_user_by_id,
+        // TODO: Add truck handlers for AxumFolderRouter
+    ),
+    {% endif %}
+    components(
+        schemas(
+            ProblemDetail,
+            LoginVM, JWTToken, RegisterUserRequest, UserResponse,
+            CreateTruckRequest, TruckResponse,
+            User, UserId,
+            Truck, TruckId
+        )
+    ),
+    tags(
+        (name = "Health", description = "Health check endpoints"),
+        (name = "Auth", description = "Authentication endpoints"),
+        (name = "Users", description = "User management endpoints"),
+        (name = "Trucks", description = "Truck management endpoints")
+    )
+)]
+pub struct ApiDoc;
+
+pub fn create_router(app_state: AppState) -> anyhow::Result<Router> {
+    let app_state = Arc::new(app_state);
+
+    {% if router_strategy == "Standard" %}
+    let router = Router::new()
+        .nest("/api/users", router_strategies::standard::handlers::user_handler::router())
+        .nest("/api/trucks", router_strategies::standard::handlers::truck_handler::router())
+        .nest("/api", router_strategies::standard::handlers::auth_handler::router())
+        .nest("/management", router_strategies::standard::handlers::health_handler::router());
+    {% elif router_strategy == "AxumController" %}
+    let router = Router::new()
+        .merge(router_strategies::axum_controller::controllers::user_controller::UserController::into_router())
+        .merge(router_strategies::axum_controller::controllers::truck_controller::TruckController::into_router())
+        .merge(router_strategies::axum_controller::controllers::auth_controller::AuthController::into_router())
+        .merge(router_strategies::axum_controller::controllers::health_controller::HealthController::into_router());
+    {% elif router_strategy == "AxumFolderRouter" %}
+    let router = axum_folder_router::Router::new()
+        .merge(router_strategies::axum_folder_router::routes::api::users::users_router()) // Placeholder name
+        .merge(router_strategies::axum_folder_router::routes::auth::auth_router()) // Placeholder name
+        .merge(router_strategies::axum_folder_router::routes::health::health_router()); // Placeholder name
+    {% endif %}
+
+    // Add OpenAPI docs
+    let router = {% if api_ui == "swagger" %}
+        router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+    {% elif api_ui == "scalar" %}
+        router.merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
+    {% else %}
+        router // No API UI
+    {% endif %};
+    
+    // Pass the AppState to all routes
+    Ok(router.with_state(app_state))
+}

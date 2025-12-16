@@ -1,0 +1,15 @@
+[package]
+name = "application"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# Dependencies from workspace Cargo.toml
+domain = { path = "../core", package = "core" }
+anyhow = { workspace = true }
+async-trait = { workspace = true } # For service traits
+validator = { workspace = true, features = ["derive"] } # For DTO validation
+serde = { workspace = true, features = ["derive"] }

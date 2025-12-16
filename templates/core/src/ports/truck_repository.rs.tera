@@ -1,0 +1,11 @@
+use async_trait::async_trait;
+use crate::domain::truck::{Truck, TruckId};
+use crate::domain::error::DomainError;
+
+#[async_trait]
+pub trait TruckRepository: Send + Sync + 'static {
+    async fn find_by_id(&self, id: &TruckId) -> Result<Option<Truck>, DomainError>;
+    async fn find_all(&self) -> Result<Vec<Truck>, DomainError>;
+    async fn save(&self, truck: Truck) -> Result<Truck, DomainError>;
+    async fn delete(&self, id: &TruckId) -> Result<(), DomainError>;
+}

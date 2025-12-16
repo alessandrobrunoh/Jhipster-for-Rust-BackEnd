@@ -1,0 +1,25 @@
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TruckId(pub u64); // Example: u64 for ID
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct Truck {
+    pub id: TruckId,
+    #[validate(length(min = 3, max = 50))]
+    pub license_plate: String,
+    #[validate(range(min = 1.0))]
+    pub capacity: f32,
+}
+
+impl Truck {
+    pub fn new(id: TruckId, license_plate: String, capacity: f32) -> Self {
+        Truck { id, license_plate, capacity }
+    }
+
+    // Example business logic method
+    pub fn is_overloaded(&self, cargo_weight: f32) -> bool {
+        cargo_weight > self.capacity
+    }
+}

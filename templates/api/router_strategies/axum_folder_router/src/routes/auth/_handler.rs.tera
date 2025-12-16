@@ -1,0 +1,36 @@
+use axum::{
+    extract::State,
+    Json,
+    Router,
+    routing::post,
+};
+use crate::di::app_state::AppState;
+use crate::error::AppError;
+use crate::dto::user_requests::{UserLoginRequest, UserTokenResponse};
+use validator::Validate;
+use std::sync::Arc;
+
+pub fn create_routes(app_state: Arc<AppState>) -> Router {
+    Router::new()
+        .route("/login", post(login))
+        .with_state(app_state)
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/auth/login",
+    request_body = UserLoginRequest,
+    responses(
+        (status = 200, description = "User logged in successfully", body = UserTokenResponse),
+        (status = 401, description = "Unauthorized", body = AppError),
+        (status = 400, description = "Bad Request", body = AppError)
+    )
+)]
+pub async fn login(
+    State(app_state): State<Arc<AppState>>,
+    Json(payload): Json<UserLoginRequest>,
+) -> Result<Json<UserTokenResponse>, AppError> {
+    payload.validate()?;
+    let token = app_state.user_service.login_user(payload.username, payload.password).await?;
+    Ok(Json(UserTokenResponse { token }))
+}

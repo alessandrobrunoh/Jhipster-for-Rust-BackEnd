@@ -1,0 +1,2 @@
+pub mod register_user_cmd;
+pub mod create_truck_cmd;

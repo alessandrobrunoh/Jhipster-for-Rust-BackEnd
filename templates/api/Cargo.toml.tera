@@ -1,0 +1,49 @@
+[package]
+name = "api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Dependencies from workspace Cargo.toml
+application = { path = "../application" }
+infrastructure = { path = "../infrastructure" }
+core = { path = "../core" } # Core as well for direct domain types in DTOs
+
+axum = { workspace = true, features = ["macros"] }
+tokio = { workspace = true, features = ["full"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = { workspace = true }
+validator = { workspace = true, features = ["derive"] }
+async-trait = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+
+# API Documentation
+utoipa = { version = "4.2", features = ["axum_extras"] }
+{% if api_ui == "swagger" %}
+utoipa-swagger-ui = { version = "6.0", features = ["axum"] }
+{% elif api_ui == "scalar" %}
+utoipa-scalar = { version = "0.1", features = ["axum"] }
+{% endif %}
+
+# Router Strategy
+{% if router_strategy == "AxumController" %}
+axum-controller = "0.1"
+{% elif router_strategy == "AxumFolderRouter" %}
+axum-folder-router = "0.1"
+{% endif %}
+
+# Auth
+{% if authentication == "jwt" %}
+jsonwebtoken = "9.2"
+argon2 = "0.5"
+chrono = { workspace = true, features = ["serde"] } # Re-declare with serde feature for JWT claims
+{% endif %}
+
+# Redis - if needed directly in API or for AppState
+{% if "redis" in infrastructure %}
+redis = { version = "0.24", features = ["tokio-comp"] }
+{% endif %}

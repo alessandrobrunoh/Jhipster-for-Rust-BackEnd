@@ -1,0 +1,20 @@
+use serde::Serialize;
+use domain::domain::user::User;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UserProfileQuery {
+    pub id: u64,
+    pub username: String,
+    pub email: String,
+    // Add other profile fields as needed
+}
+
+impl From<User> for UserProfileQuery {
+    fn from(user: User) -> Self {
+        Self {
+            id: user.id.0,
+            username: user.username,
+            email: user.email,
+        }
+    }
+}

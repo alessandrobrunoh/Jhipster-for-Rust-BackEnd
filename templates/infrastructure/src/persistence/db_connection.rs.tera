@@ -1,0 +1,73 @@
+use std::env;
+use std::sync::Arc;
+use tokio::sync::OnceCell;
+use anyhow::Result;
+
+{% if orm == "sqlx" %}
+use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
+pub type DbPool = Pool<Postgres>;
+{% elif orm == "diesel" %}
+use diesel::r2d2::{ConnectionManager, Pool};
+use diesel::PgConnection;
+pub type DbPool = Pool<ConnectionManager<PgConnection>>;
+pub type PooledDb = diesel::r2d2::PooledConnection<ConnectionManager<PgConnection>>;
+{% elif orm == "seaorm" %}
+use sea_orm::{Database, DatabaseConnection};
+{% elif database == "mongodb" %}
+use mongodb::{Client, options::ClientOptions};
+{% endif %}
+
+pub fn get_database_url() -> Option<String> {
+    env::var("DATABASE_URL").ok()
+}
+
+{% if orm == "sqlx" %}
+pub async fn get_db_pool() -> Result<Arc<DbPool>> {
+    static INSTANCE: OnceCell<Arc<DbPool>> = OnceCell::const_new();
+    
+    // get_or_init expects an async block that returns T.
+    // Our T is Arc<DbPool>.
+    // But we are returning Result inside.
+    // OnceCell doesn't natively handle Result initialization failure retries well in this pattern 
+    // if we want to return the error.
+    // But we can unwrap or expect inside if we are confident, or use a Mutex Option.
+    // For simplicity, we'll construct it.
+    
+    // Correct usage: await the init.
+    let pool_arc = INSTANCE.get_or_init(|| async {
+        let database_url = get_database_url().expect("DATABASE_URL not set");
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&database_url)
+            .await
+            .expect("Failed to create SQLx pool");
+        Arc::new(pool)
+    }).await;
+
+    Ok(pool_arc.clone())
+}
+{% elif orm == "diesel" %}
+pub fn get_db_pool() -> Result<Arc<DbPool>> {
+    // Diesel r2d2 pool is synchronous creation usually
+    let database_url = get_database_url().expect("DATABASE_URL not set");
+    let manager = ConnectionManager::<PgConnection>::new(database_url);
+    let pool = Pool::builder()
+        .build(manager)
+        .expect("Failed to create Diesel pool");
+    Ok(Arc::new(pool))
+}
+{% elif orm == "seaorm" %}
+pub async fn get_db_pool() -> Result<DatabaseConnection> {
+    // SeaORM connection is already Arc-like (clonable)
+    let database_url = get_database_url().expect("DATABASE_URL not set");
+    let db = Database::connect(database_url).await?;
+    Ok(db)
+}
+{% elif database == "mongodb" %}
+pub async fn get_db_client() -> Result<Client> {
+    let database_url = get_database_url().expect("DATABASE_URL not set");
+    let client_options = ClientOptions::parse(database_url).await?;
+    let client = Client::with_options(client_options)?;
+    Ok(client)
+}
+{% endif %}

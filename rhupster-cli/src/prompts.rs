@@ -1,7 +1,8 @@
 use anyhow::Result;
-use dialoguer::{theme::ColorfulTheme, Input, MultiSelect, Select, Confirm};
+use dialoguer::{theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
 use rhupster_core::config::{
-    Authentication, Database, DevOps, Frontend, Infrastructure, OAuthProvider, Orm, ProjectConfig, RouterStrategy,
+    AIAgent, ApiUi, Authentication, Database, DevOps, Frontend, Infrastructure, OAuthProvider, Orm,
+    ProjectConfig, RouterStrategy,
 };
 
 pub struct PromptService {
@@ -21,10 +22,12 @@ impl PromptService {
         let orm = self.ask_orm(database)?;
         let infrastructure = self.ask_infrastructure()?;
         let router_strategy = self.ask_router_strategy()?;
+        let api_ui = self.ask_api_ui()?;
         let frontend = self.ask_frontend()?;
         let authentication = self.ask_authentication()?;
         let hateoas = self.ask_hateoas()?;
         let docker_compose = self.ask_docker_compose()?;
+        let ai_agents = self.ask_ai_agents()?;
 
         Ok(ProjectConfig {
             name,
@@ -35,7 +38,9 @@ impl PromptService {
             authentication,
             devops: DevOps { docker_compose },
             router_strategy,
+            api_ui,
             hateoas,
+            ai_agents,
         })
     }
 
@@ -48,7 +53,12 @@ impl PromptService {
     }
 
     fn ask_database(&self) -> Result<Database> {
-        let db_opts = vec![Database::Postgres, Database::MySQL, Database::MongoDB, Database::SQLite];
+        let db_opts = vec![
+            Database::Postgres,
+            Database::MySQL,
+            Database::MongoDB,
+            Database::SQLite,
+        ];
         let idx = Select::with_theme(&self.theme)
             .with_prompt("Select a Database")
             .default(0)
@@ -62,7 +72,7 @@ impl PromptService {
             println!("  (MongoDB selected: skipping ORM selection, using native driver)");
             Ok(Orm::None)
         } else {
-            let orm_opts = vec![Orm::Sqlx, Orm::Diesel];
+            let orm_opts = vec![Orm::Sqlx, Orm::Diesel, Orm::SeaOrm]; // Added SeaOrm
             let idx = Select::with_theme(&self.theme)
                 .with_prompt("Select an ORM")
                 .default(0)
@@ -82,7 +92,11 @@ impl PromptService {
     }
 
     fn ask_router_strategy(&self) -> Result<RouterStrategy> {
-        let opts = vec![RouterStrategy::Standard, RouterStrategy::AxumController, RouterStrategy::AxumFolderRouter];
+        let opts = vec![
+            RouterStrategy::Standard,
+            RouterStrategy::AxumController,
+            RouterStrategy::AxumFolderRouter,
+        ]; // Reintroduced AxumFolderRouter
         let idx = Select::with_theme(&self.theme)
             .with_prompt("Select Routing Strategy")
             .default(0)
@@ -91,8 +105,24 @@ impl PromptService {
         Ok(opts[idx])
     }
 
+    fn ask_api_ui(&self) -> Result<ApiUi> {
+        let opts = vec![ApiUi::Swagger, ApiUi::Scalar, ApiUi::None];
+        let idx = Select::with_theme(&self.theme)
+            .with_prompt("Select API Documentation UI")
+            .default(0)
+            .items(&opts)
+            .interact()?;
+        Ok(opts[idx])
+    }
+
     fn ask_frontend(&self) -> Result<Frontend> {
-        let opts = vec![Frontend::React, Frontend::Vue, Frontend::Svelte, Frontend::Angular, Frontend::None];
+        let opts = vec![
+            Frontend::React,
+            Frontend::Vue,
+            Frontend::Svelte,
+            Frontend::Angular,
+            Frontend::None,
+        ];
         let idx = Select::with_theme(&self.theme)
             .with_prompt("Select a Frontend Framework")
             .default(0)
@@ -114,12 +144,19 @@ impl PromptService {
             1 => Ok(Authentication::Basic),
             2 => Ok(Authentication::Jwt),
             3 => {
-                let opts = vec![OAuthProvider::Discord, OAuthProvider::Google, OAuthProvider::Apple, OAuthProvider::GitHub];
+                let opts = vec![
+                    OAuthProvider::Discord,
+                    OAuthProvider::Google,
+                    OAuthProvider::Apple,
+                    OAuthProvider::GitHub,
+                ];
                 let idxs = MultiSelect::with_theme(&self.theme)
                     .with_prompt("Select OAuth2 Providers")
                     .items(&opts)
                     .interact()?;
-                Ok(Authentication::OAuth2(idxs.iter().map(|&i| opts[i]).collect()))
+                Ok(Authentication::OAuth2(
+                    idxs.iter().map(|&i| opts[i]).collect(),
+                ))
             }
             _ => unreachable!(),
         }
@@ -139,5 +176,14 @@ impl PromptService {
             .default(true)
             .interact()
             .map_err(Into::into)
+    }
+
+    fn ask_ai_agents(&self) -> Result<Vec<AIAgent>> {
+        let opts = vec![AIAgent::Claude, AIAgent::Gemini, AIAgent::GPT];
+        let idxs = MultiSelect::with_theme(&self.theme)
+            .with_prompt("Select AI Agents (for future context folders)")
+            .items(&opts)
+            .interact()?;
+        Ok(idxs.iter().map(|&i| opts[i]).collect())
     }
 }

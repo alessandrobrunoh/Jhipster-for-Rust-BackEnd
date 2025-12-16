@@ -1,0 +1,112 @@
+use axum::{Router, response::IntoResponse};
+use axum::extract::MatchedPath;
+use axum::http::{Method, StatusCode};
+use axum::routing::{get, post, put, delete};
+use std::sync::Arc;
+use utoipa::{OpenApi, Modify};
+use utoipa_scalar::{Scalar, Servable};
+
+use crate::di::app_state::AppState;
+use crate::dto::user_requests::{RegisterUserRequest, UserLoginRequest, UserResponse, UserTokenResponse};
+use crate::dto::truck_requests::{CreateTruckRequest, TruckResponse};
+use crate::error::ProblemDetail;
+use crate::controllers::{
+    user_controller,
+    auth_controller,
+    truck_controller,
+    health_controller
+};
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        crate::controllers::user_controller::register_user,
+        crate::controllers::user_controller::get_user_by_id,
+        crate::controllers::auth_controller::login,
+        crate::controllers::auth_controller::register,
+        crate::controllers::health_controller::health_check,
+        crate::controllers::truck_controller::create_truck,
+        crate::controllers::truck_controller::get_truck,
+        crate::controllers::truck_controller::get_all_trucks,
+        crate::controllers::truck_controller::update_truck,
+        crate::controllers::truck_controller::delete_truck,
+    ),
+    components(
+        schemas(RegisterUserRequest, UserLoginRequest, UserResponse, UserTokenResponse, CreateTruckRequest, TruckResponse, ProblemDetail)
+    ),
+    tags(
+        (name = "User", description = "User management endpoints"),
+        (name = "Auth", description = "Authentication endpoints"),
+        (name = "Truck", description = "Truck management endpoints"),
+        (name = "Health", description = "Health check endpoint")
+    ),
+    modifiers(&SecurityAddon)
+)]
+struct ApiDoc;
+
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi.components.as_mut().unwrap();
+        components.add_security_scheme(
+            "jwt_token",
+            utoipa::openapi::security::SecurityScheme::Http(
+                utoipa::openapi::security::HttpBuilder::new()
+                    .scheme(utoipa::openapi::security::HttpAuthScheme::Bearer)
+                    .bearer_format("JWT")
+                    .description(Some("JWT token for authentication"))
+                    .build(),
+            ),
+        );
+    }
+}
+
+
+pub fn create_router(app_state: Arc<AppState>) -> Router {
+    // User routes
+    let user_routes = Router::new()
+        .route("/api/users", post(user_controller::register_user))
+        .route("/api/users/:id", get(user_controller::get_user_by_id));
+
+    // Auth routes
+    let auth_routes = Router::new()
+        .route("/api/auth/login", post(auth_controller::login))
+        .route("/api/auth/register", post(auth_controller::register));
+
+    // Truck routes
+    let truck_routes = Router::new()
+        .route("/api/trucks", post(truck_controller::create_truck))
+        .route("/api/trucks", get(truck_controller::get_all_trucks))
+        .route("/api/trucks/:id", get(truck_controller::get_truck))
+        .route("/api/trucks/:id", put(truck_controller::update_truck))
+        .route("/api/trucks/:id", delete(truck_controller::delete_truck));
+
+    // Health route
+    let health_routes = Router::new()
+        .route("/health", get(health_controller::health_check));
+
+    // Combine all routes
+    let api_router = Router::new()
+        .merge(user_routes)
+        .merge(auth_routes)
+        .merge(truck_routes)
+        .merge(health_routes);
+
+    let swagger_json = ApiDoc::openapi().to_json().unwrap();
+
+    Router::new()
+        .merge(api_router)
+        .merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
+        .route("/api-docs/openapi.json", get(|| async move { swagger_json }))
+        .with_state(app_state)
+        .fallback(handler_404)
+}
+
+async fn handler_404(method: Method, matched_path: Option<MatchedPath>) -> impl IntoResponse {
+    let path = matched_path.map_or_else(|| "unknown".to_string(), |p| p.as_str().to_string());
+    (
+        StatusCode::NOT_FOUND,
+        format!("API endpoint not found: {} {}", method, path),
+    )
+}

@@ -1,0 +1,61 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import axios from 'axios';
+import AuthService from '@/services/AuthService';
+import { Table, Button } from 'reactstrap';
+
+interface Truck {
+  id: number;
+  license_plate: string;
+  capacity: number;
+}
+
+export default function TruckList() {
+  const [trucks, setTrucks] = useState<Truck[]>([]);
+  const router = useRouter();
+
+  useEffect(() => {
+    const user = AuthService.getCurrentUser();
+    if (!user) {
+      router.push('/login');
+    } else {
+      fetchTrucks();
+    }
+  }, [router]);
+
+  const fetchTrucks = async () => {
+    try {
+      const res = await axios.get('/api/trucks', { headers: AuthService.getAuthHeader() });
+      setTrucks(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  return (
+    <div className="mt-5">
+      <h2>Truck Management</h2>
+      <Table striped>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>License Plate</th>
+            <th>Capacity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {trucks.map(truck => (
+            <tr key={truck.id}>
+              <td>{truck.id}</td>
+              <td>{truck.license_plate}</td>
+              <td>{truck.capacity}</td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+      <Button color="primary" onClick={fetchTrucks}>Refresh</Button>
+    </div>
+  );
+}

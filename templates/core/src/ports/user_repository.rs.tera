@@ -1,0 +1,11 @@
+use async_trait::async_trait;
+use crate::domain::user::{User, UserId};
+use crate::domain::error::DomainError;
+
+#[async_trait]
+pub trait UserRepository: Send + Sync + 'static {
+    async fn find_by_id(&self, id: &UserId) -> Result<Option<User>, DomainError>;
+    async fn find_by_username(&self, username: &str) -> Result<Option<User>, DomainError>;
+    async fn save(&self, user: User) -> Result<User, DomainError>;
+    async fn delete(&self, id: &UserId) -> Result<(), DomainError>;
+}
