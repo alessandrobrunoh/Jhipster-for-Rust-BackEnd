@@ -28,7 +28,11 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = TcpListener::bind("0.0.0.0:8080").await?;
     tracing::info!("Server listening on {}", listener.local_addr()?);
+    {% if api_ui == "swagger" %}
+    tracing::info!("Swagger UI available at http://localhost:8080/swagger-ui");
+    {% elif api_ui == "scalar" %}
     tracing::info!("Scalar API documentation available at http://localhost:8080/scalar");
+    {% endif %}
 
     axum::serve(listener, app).await?;
 

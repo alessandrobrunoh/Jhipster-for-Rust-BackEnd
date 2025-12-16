@@ -4,7 +4,11 @@ use axum::http::{Method, StatusCode};
 use axum::routing::{get, post, put, delete};
 use std::sync::Arc;
 use utoipa::{OpenApi, Modify};
+{% if api_ui == "swagger" %}
+use utoipa_swagger_ui::SwaggerUi;
+{% elif api_ui == "scalar" %}
 use utoipa_scalar::{Scalar, Servable};
+{% endif %}
 
 use crate::di::app_state::AppState;
 use crate::dto::user_requests::{RegisterUserRequest, UserLoginRequest, UserResponse, UserTokenResponse};
@@ -93,14 +97,24 @@ pub fn create_router(app_state: Arc<AppState>) -> Router {
         .merge(truck_routes)
         .merge(health_routes);
 
-    let swagger_json = ApiDoc::openapi().to_json().unwrap();
-
+    {% if api_ui == "swagger" %}
+    Router::new()
+        .merge(api_router)
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+        .with_state(app_state)
+        .fallback(handler_404)
+    {% elif api_ui == "scalar" %}
     Router::new()
         .merge(api_router)
         .merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
-        .route("/api-docs/openapi.json", get(|| async move { swagger_json }))
         .with_state(app_state)
         .fallback(handler_404)
+    {% else %}
+    Router::new()
+        .merge(api_router)
+        .with_state(app_state)
+        .fallback(handler_404)
+    {% endif %}
 }
 
 async fn handler_404(method: Method, matched_path: Option<MatchedPath>) -> impl IntoResponse {
