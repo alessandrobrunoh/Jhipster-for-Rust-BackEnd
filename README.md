@@ -68,7 +68,7 @@ Offrire uno stack produttivo “ready-to-build” che standardizza convenzioni e
 - Futuro: gateway/API composition, admin auto-generato, analytics
 
 # Example
-```bash
+```
 Welcome to Rhupster - The Rust/Axum Enterprise Generator
 Let's configure your new project.
 
@@ -96,4 +96,54 @@ Generating Frontend...
 Success! Project generated.
 cd /Users/tacosalfornoh/Coding/Rust/Rhupster/rhupster-cli/src/my-axum-app
 cargo run
+```
+
+## Structure generated
+```
+my-axum-app/
+├── .env
+├── .gitignore  
+├── Cargo.lock
+├── Cargo.toml
+├── README.md
+├── STRUCTURE.md
+├── api/
+│   ├── Cargo.toml
+│   ├── client/          # React/Next.js Frontend
+│   └── src/
+│       ├── lib.rs
+│       ├── main.rs
+│       ├── di/          # Dependency Injection
+│       ├── dto/         # Data Transfer Objects
+│       ├── error.rs     # Error handling
+│       ├── extractors/  # Custom extractors
+│       └── routes/      # API routes (axum_folder_router)
+├── application/
+│   ├── Cargo.toml
+│   └── src/
+│       ├── lib.rs
+│       ├── commands/    # CQRS Commands
+│       ├── query/       # CQRS Queries
+│       └── services/    # Business logic
+├── core/
+│   ├── Cargo.toml
+│   └── src/
+│       ├── lib.rs
+│       ├── domain/      # Domain entities
+│       └── ports/       # Repository interfaces
+├── infrastructure/
+│   ├── Cargo.toml
+│   ├── docker-compose.yml
+│   ├── migrations/      # Diesel migrations
+│   │   ├── 00000000000000_diesel_initial_setup/
+│   │   ├── 2025-12-16-010405-0000_create_users/
+│   │   └── 2025-12-16-010409-0000_create_trucks/
+│   └── src/
+│       ├── lib.rs
+│       ├── schema.rs    # Diesel schema (generated)
+│       ├── clients/     # External clients (Redis, etc.)
+│       ├── config.rs    # Configuration
+│       ├── migrations/  # Migration module
+│       └── persistence/ # Database adapters
+└── target/              # Build artifacts (ignored)
 ```
