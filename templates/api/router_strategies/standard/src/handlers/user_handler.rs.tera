@@ -13,7 +13,7 @@ use domain::domain::user::UserId;
 use validator::Validate;
 use std::sync::Arc;
 
-pub fn router() -> Router<AppState> {
+pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", post(register_user))
         .route("/:id", get(get_user_by_id))

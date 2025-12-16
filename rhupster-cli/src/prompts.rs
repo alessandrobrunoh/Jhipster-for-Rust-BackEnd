@@ -83,7 +83,11 @@ impl PromptService {
     }
 
     fn ask_infrastructure(&self) -> Result<Vec<Infrastructure>> {
-        let infra_opts = vec![Infrastructure::Redis, Infrastructure::Kafka];
+        let infra_opts = vec![
+            Infrastructure::Redis,
+            Infrastructure::Kafka,
+            Infrastructure::Socket,
+        ];
         let idxs = MultiSelect::with_theme(&self.theme)
             .with_prompt("Select Infrastructure & Caching")
             .items(&infra_opts)

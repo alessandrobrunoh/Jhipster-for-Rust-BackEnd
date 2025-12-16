@@ -27,7 +27,7 @@ diesel = { workspace = true, features = ["{{ database }}", "r2d2", "chrono", "uu
 diesel_migrations = { workspace = true }
 r2d2 = "0.8" # For Diesel connection pooling
 {% elif orm == "seaorm" %}
-sea-orm = { workspace = true, features = ["sqlx-{{ database }}", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
+sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 # sea-orm-cli is usually a dev-dependency or global tool, not a crate dependency for runtime
 {% elif database == "mongodb" %}
@@ -35,12 +35,15 @@ mongodb = { workspace = true }
 futures = "0.3" # For async operations with mongodb
 {% endif %}
 
-# Redis
+# SeaStreamer (Redis & Kafka)
+{% if "redis" in infrastructure or "kafka" in infrastructure %}
+sea-streamer = "0.5"
+{% endif %}
 {% if "redis" in infrastructure %}
-redis = { version = "0.24", features = ["tokio-comp"] }
-# Optionally add `bb8-redis` for connection pooling
-# bb8-redis = "0.12"
-# bb8 = "0.8"
+sea-streamer-redis = "0.5"
+{% endif %}
+{% if "kafka" in infrastructure %}
+sea-streamer-kafka = "0.5"
 {% endif %}
 
 [dev-dependencies]

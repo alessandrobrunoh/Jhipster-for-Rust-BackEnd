@@ -2,3 +2,6 @@ pub mod user_handler;
 pub mod truck_handler;
 pub mod auth_handler;
 pub mod health_handler;
+{% if "socket" in infrastructure %}
+pub mod socket_handler;
+{% endif %}

@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use infrastructure::config::init_env; // Use infrastructure's config
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use tokio::net::TcpListener;
@@ -16,16 +15,18 @@ async fn main() -> anyhow::Result<()> {
     // Initialize tracing (logging)
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
-        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+        )
         .init();
 
     tracing::info!("Starting up application...");
 
     // Build the AppState (Dependency Injection Container)
-    let app_state = Arc::new(AppState::build().await?);
+    let app_state = AppState::build().await?;
 
     // Create the Axum router
-    let app = create_router(app_state);
+    let app = create_router(app_state)?;
 
     // UI Log
     {% if api_ui == "swagger" %}

@@ -8,7 +8,11 @@ use anyhow::Context;
 {% endif %}
 use std::sync::Arc;
 
-use super::db_models::{UserDb{% if orm == "diesel" %}, NewUserDb{% elif orm == "seaorm" %}, UserEntity, UserModel, UserActiveModel{% endif %}};
+{% if orm == "seaorm" %}
+use super::db_models::{UserEntity, UserModel, UserActiveModel};
+{% else %}
+use super::db_models::{UserDb{% if orm == "diesel" %}, NewUserDb{% endif %}};
+{% endif %}
 
 {% if orm == "sqlx" %}
 use super::db_connection::DbPool;
@@ -19,7 +23,7 @@ use diesel::insert_into;
 use super::schema::users;
 {% elif orm == "seaorm" %}
 use super::db_connection::DatabaseConnection;
-use sea_orm::{ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait, Set};
+use sea_orm::{ActiveModelTrait, EntityTrait, TryIntoModel, IntoActiveModel, QueryFilter, ColumnTrait};
 {% elif database == "mongodb" %}
 use super::db_connection::Client;
 use mongodb::{bson::doc, options::FindOneOptions};
@@ -176,12 +180,11 @@ impl UserRepository for UserRepositoryImpl {
                 .map_err(|e| DomainError::InternalError(format!("Failed to convert UserDb to User: {}", e)))
         }
         {% elif orm == "seaorm" %}
-        let user_model: UserModel = user.clone().into(); // Assuming conversion is possible
         let active_model: UserActiveModel = user.into();
         let saved_model = active_model.save(&*self.db)
             .await
             .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-        Ok(saved_model.try_into_model().map_err(|e| DomainError::DatabaseError(e.to_string()))?.into())
+        Ok(saved_model.try_into_model().map_err(|e: sea_orm::DbErr| DomainError::DatabaseError(e.to_string()))?.into())
         {% elif database == "mongodb" %}
         let collection = self.client.database("{{ name | replace(from="-", to="_") }}_db").collection::<UserDb>("users");
         let new_user_db = UserDb {
@@ -225,7 +228,7 @@ impl UserRepository for UserRepositoryImpl {
         let user_active = user_model.into_active_model();
         user_active.delete(&*self.db)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e: sea_orm::DbErr| DomainError::DatabaseError(e.to_string()))?;
         Ok(())
         {% elif database == "mongodb" %}
         let collection = self.client.database("{{ name | replace(from="-", to="_") }}_db").collection::<UserDb>("users");

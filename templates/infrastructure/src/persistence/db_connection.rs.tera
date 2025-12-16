@@ -5,8 +5,6 @@ use std::sync::Arc;
 use tokio::sync::OnceCell;
 {% elif orm == "diesel" %}
 use std::sync::Arc;
-{% elif orm == "seaorm" %}
-use std::sync::Arc;
 {% endif %}
 
 {% if orm == "sqlx" %}

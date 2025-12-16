@@ -6,7 +6,7 @@ use axum::{
 use crate::di::app_state::AppState;
 use std::sync::Arc;
 
-pub fn router() -> Router<AppState> {
+pub fn router() -> Router<Arc<AppState>> {
     Router::new().route("/health", get(health_check))
 }
 

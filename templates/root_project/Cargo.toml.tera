@@ -32,6 +32,13 @@ utoipa-swagger-ui = { version = "6.0", features = ["axum"] }
 utoipa-scalar = { version = "0.1", features = ["axum"] }
 {% endif %}
 
+# SeaStreamer
+{% if "redis" in infrastructure or "kafka" in infrastructure %}
+sea-streamer = "0.5"
+sea-streamer-kafka = { version = "0.5" }
+sea-streamer-redis = { version = "0.5" }
+{% endif %}
+
 # Database
 {% if orm == "sqlx" %}
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "{{ database }}", "uuid", "chrono", "macros"] }
@@ -40,7 +47,7 @@ diesel = { version = "2.1", features = ["{{ database }}", "r2d2", "chrono", "uui
 diesel_migrations = "2.1"
 {% elif orm == "seaorm" %}
 sea-orm = { version = "0.12", features = ["sqlx-{{ database }}", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
-sea-orm-migration = "0.12"
+sea-orm-migration = { version = "0.12" }
 {% elif database == "mongodb" %}
 mongodb = "2.8"
 {% endif %}

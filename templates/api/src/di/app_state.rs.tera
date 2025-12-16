@@ -6,8 +6,8 @@ use infrastructure::persistence::db_connection;
 use infrastructure::persistence::user_adapter::{UserRepositoryImpl};
 use infrastructure::persistence::truck_adapter::{TruckRepositoryImpl};
 use infrastructure::persistence::transaction_adapter::{TransactionManagerImpl};
-{% if "redis" in infrastructure %}
-use infrastructure::clients::redis_client;
+{% if "redis" in infrastructure or "kafka" in infrastructure %}
+use infrastructure::clients::sea_streamer_client::{SeaStreamerClient, get_sea_streamer_client};
 {% endif %}
 
 // Application services
@@ -19,12 +19,10 @@ use domain::ports::user_repository::UserRepository;
 use domain::ports::truck_repository::TruckRepository;
 use domain::ports::transaction_manager::TransactionManager;
 
-{% if orm == "sqlx" %}
-pub type DbPool = db_connection::DbPool;
-{% elif orm == "diesel" %}
+{% if orm == "sqlx" or orm == "diesel" %}
 pub type DbPool = db_connection::DbPool;
 {% elif orm == "seaorm" %}
-pub type DbPool = sea_orm::DatabaseConnection;
+pub type DbConnection = sea_orm::DatabaseConnection;
 {% elif database == "mongodb" %}
 pub type MongoClient = mongodb::Client;
 {% endif %}
@@ -33,15 +31,17 @@ pub type MongoClient = mongodb::Client;
 #[derive(Clone)]
 pub struct AppState {
     // Database Pool/Client
-    {% if orm == "sqlx" or orm == "diesel" or orm == "seaorm" %}
-    pub db: Arc<DbPool>,
+    {% if orm == "sqlx" or orm == "diesel" %}
+    pub db_pool: Arc<DbPool>,
+    {% elif orm == "seaorm" %}
+    pub db_connection: Arc<DbConnection>,
     {% elif database == "mongodb" %}
-    pub db_client: Arc<MongoClient>,
+    pub mongo_client: Arc<MongoClient>,
     {% endif %}
 
-    // Redis Client
-    {% if "redis" in infrastructure %}
-    pub redis: Arc<redis::Client>,
+    // SeaStreamer Client
+    {% if "redis" in infrastructure or "kafka" in infrastructure %}
+    pub streamer_client: Arc<SeaStreamerClient>,
     {% endif %}
 
     // Application Services (Use Cases)
@@ -50,28 +50,30 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn build() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         // Initialize Database
-        {% if orm == "sqlx" or orm == "diesel" or orm == "seaorm" %}
+        {% if orm == "sqlx" or orm == "diesel" %}
         let db_pool = db_connection::get_db_pool().await?;
+        {% elif orm == "seaorm" %}
+        let db_connection = db_connection::get_db_pool().await?; // SeaORM returns DatabaseConnection directly
         {% elif database == "mongodb" %}
-        let db_client = db_connection::get_db_client().await?;
+        let mongo_client = db_connection::get_db_client().await?;
         {% endif %}
 
-        // Initialize Redis
-        {% if "redis" in infrastructure %}
-        let redis_client = redis_client::get_redis_client().await?;
+        // Initialize SeaStreamer Client
+        {% if "redis" in infrastructure or "kafka" in infrastructure %}
+        let streamer_client = get_sea_streamer_client().await?;
         {% endif %}
 
         // --- Build Infrastructure Layer Implementations ---
         let user_repo: Arc<dyn UserRepository> = Arc::new(UserRepositoryImpl::new(
-            {% if orm == "sqlx" or orm == "diesel" or orm == "seaorm" %}db_pool.clone(){% elif database == "mongodb" %}db_client.clone(){% endif %}
+            {% if orm == "sqlx" or orm == "diesel" %}db_pool.clone(){% elif orm == "seaorm" %}db_connection.clone(){% elif database == "mongodb" %}mongo_client.clone(){% endif %}
         ));
         let truck_repo: Arc<dyn TruckRepository> = Arc::new(TruckRepositoryImpl::new(
-            {% if orm == "sqlx" or orm == "diesel" or orm == "seaorm" %}db_pool.clone(){% elif database == "mongodb" %}db_client.clone(){% endif %}
+            {% if orm == "sqlx" or orm == "diesel" %}db_pool.clone(){% elif orm == "seaorm" %}db_connection.clone(){% elif database == "mongodb" %}mongo_client.clone(){% endif %}
         ));
         let tx_manager: Arc<dyn TransactionManager> = Arc::new(TransactionManagerImpl::new(
-            {% if orm == "sqlx" or orm == "diesel" or orm == "seaorm" %}db_pool.clone(){% elif database == "mongodb" %}db_client.clone(){% endif %}
+            {% if orm == "sqlx" or orm == "diesel" %}db_pool.clone(){% elif orm == "seaorm" %}db_connection.clone(){% elif database == "mongodb" %}mongo_client.clone(){% endif %}
         ));
 
         // --- Build Application Layer Services ---
@@ -85,13 +87,15 @@ impl AppState {
         ));
 
         Ok(Self {
-            {% if orm == "sqlx" or orm == "diesel" or orm == "seaorm" %}
-            db: db_pool,
+            {% if orm == "sqlx" or orm == "diesel" %}
+            db_pool,
+            {% elif orm == "seaorm" %}
+            db_connection: Arc::new(db_connection), // Wrap in Arc for consistency
             {% elif database == "mongodb" %}
-            db_client: db_client,
+            mongo_client,
             {% endif %}
-            {% if "redis" in infrastructure %}
-            redis: redis_client,
+            {% if "redis" in infrastructure or "kafka" in infrastructure %}
+            streamer_client,
             {% endif %}
             user_service,
             truck_service,

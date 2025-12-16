@@ -47,6 +47,7 @@ impl std::fmt::Display for Orm {
 pub enum Infrastructure {
     Redis,
     Kafka,
+    Socket,
 }
 
 impl std::fmt::Display for Infrastructure {

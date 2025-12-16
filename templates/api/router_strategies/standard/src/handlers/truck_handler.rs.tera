@@ -13,7 +13,7 @@ use domain::domain::truck::TruckId;
 use validator::Validate;
 use std::sync::Arc;
 
-pub fn router() -> Router<AppState> {
+pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", post(create_truck).get(get_all_trucks))
         .route("/:id", get(get_truck_by_id))
@@ -67,6 +67,6 @@ pub async fn get_truck_by_id(
     State(app_state): State<Arc<AppState>>,
     Path(id): Path<u64>,
 ) -> Result<Json<TruckResponse>, AppError> {
-    let truck = app_state.truck_service.get_truck_by_id(TruckId(id)).await?;
+    let truck = app_state.truck_service.get_truck(TruckId(id)).await?;
     Ok(Json(truck.into()))
 }

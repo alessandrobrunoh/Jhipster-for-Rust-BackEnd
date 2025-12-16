@@ -9,6 +9,10 @@ application = { path = "../application" }
 infrastructure = { path = "../infrastructure" }
 core = { path = "../core" } # Core as well for direct domain types in DTOs
 
+{% if orm == "seaorm" %}
+sea-orm = { workspace = true }
+{% endif %}
+
 axum = { workspace = true, features = ["macros"] }
 tokio = { workspace = true, features = ["full"] }
 serde = { workspace = true, features = ["derive"] }

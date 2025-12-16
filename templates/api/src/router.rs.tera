@@ -1,4 +1,4 @@
-use axum::{Router, middleware};
+use axum::Router;
 use crate::di::app_state::AppState;
 use std::sync::Arc;
 
@@ -13,22 +13,20 @@ use utoipa_scalar::{Scalar, ScalarDocs};
 use crate::error::ProblemDetail;
 use crate::dto::user_requests::{LoginVM, JWTToken, RegisterUserRequest, UserResponse};
 use crate::dto::truck_requests::{CreateTruckRequest, TruckResponse};
-use domain::domain::user::{User, UserId}; // For OpenAPI schemas
-use domain::domain::truck::{Truck, TruckId}; // For OpenAPI schemas
 
 
 #[derive(OpenApi)]
 #[openapi(
     {% if router_strategy == "Standard" %}
     paths(
-        router_strategies::standard::handlers::health_handler::health_check,
-        router_strategies::standard::handlers::auth_handler::login,
-        router_strategies::standard::handlers::auth_handler::register,
-        router_strategies::standard::handlers::user_handler::register_user,
-        router_strategies::standard::handlers::user_handler::get_user_by_id,
-        router_strategies::standard::handlers::truck_handler::create_truck,
-        router_strategies::standard::handlers::truck_handler::get_all_trucks,
-        router_strategies::standard::handlers::truck_handler::get_truck_by_id,
+        crate::handlers::health_handler::health_check,
+        crate::handlers::auth_handler::login,
+        crate::handlers::auth_handler::register,
+        crate::handlers::user_handler::register_user,
+        crate::handlers::user_handler::get_user_by_id,
+        crate::handlers::truck_handler::create_truck,
+        crate::handlers::truck_handler::get_all_trucks,
+        crate::handlers::truck_handler::get_truck_by_id,
     ),
     {% elif router_strategy == "AxumController" %}
     paths(
@@ -56,9 +54,7 @@ use domain::domain::truck::{Truck, TruckId}; // For OpenAPI schemas
         schemas(
             ProblemDetail,
             LoginVM, JWTToken, RegisterUserRequest, UserResponse,
-            CreateTruckRequest, TruckResponse,
-            User, UserId,
-            Truck, TruckId
+            CreateTruckRequest, TruckResponse
         )
     ),
     tags(
@@ -75,10 +71,15 @@ pub fn create_router(app_state: AppState) -> anyhow::Result<Router> {
 
     {% if router_strategy == "Standard" %}
     let router = Router::new()
-        .nest("/api/users", router_strategies::standard::handlers::user_handler::router())
-        .nest("/api/trucks", router_strategies::standard::handlers::truck_handler::router())
-        .nest("/api", router_strategies::standard::handlers::auth_handler::router())
-        .nest("/management", router_strategies::standard::handlers::health_handler::router());
+        .nest("/api/users", crate::handlers::user_handler::router())
+        .nest("/api/trucks", crate::handlers::truck_handler::router())
+        .nest("/api", crate::handlers::auth_handler::router())
+        .nest("/management", crate::handlers::health_handler::router());
+
+    {% if "socket" in infrastructure %}
+    let router = router.route("/ws", axum::routing::get(crate::handlers::socket_handler::ws_handler));
+    {% endif %}
+
     {% elif router_strategy == "AxumController" %}
     let router = Router::new()
         .merge(router_strategies::axum_controller::controllers::user_controller::UserController::into_router())
@@ -100,7 +101,7 @@ pub fn create_router(app_state: AppState) -> anyhow::Result<Router> {
     {% else %}
         router // No API UI
     {% endif %};
-    
+
     // Pass the AppState to all routes
     Ok(router.with_state(app_state))
 }

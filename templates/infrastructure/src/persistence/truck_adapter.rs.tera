@@ -8,7 +8,11 @@ use anyhow::Context;
 {% endif %}
 use std::sync::Arc;
 
-use super::db_models::{TruckDb{% if orm == "diesel" %}, NewTruckDb{% elif orm == "seaorm" %}, TruckEntity, TruckModel, TruckActiveModel{% endif %}};
+{% if orm == "seaorm" %}
+use super::db_models::{TruckEntity, TruckModel, TruckActiveModel};
+{% else %}
+use super::db_models::{TruckDb{% if orm == "diesel" %}, NewTruckDb{% endif %}};
+{% endif %}
 
 {% if orm == "sqlx" %}
 use super::db_connection::DbPool;
@@ -19,7 +23,7 @@ use diesel::insert_into;
 use super::schema::trucks;
 {% elif orm == "seaorm" %}
 use super::db_connection::DatabaseConnection;
-use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, EntityTrait, TryIntoModel, IntoActiveModel};
 {% elif database == "mongodb" %}
 use super::db_connection::Client;
 use mongodb::{bson::doc, options::FindOneOptions, options::FindOptions}; // Added FindOptions for find_all
@@ -176,7 +180,7 @@ impl TruckRepository for TruckRepositoryImpl {
         let saved_model = active_model.save(&*self.db)
             .await
             .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-        Ok(saved_model.try_into_model().map_err(|e| DomainError::DatabaseError(e.to_string()))?.into())
+        Ok(saved_model.try_into_model().map_err(|e: sea_orm::DbErr| DomainError::DatabaseError(e.to_string()))?.into())
         {% elif database == "mongodb" %}
         let collection = self.client.database("{{ name | replace(from="-", to="_") }}_db").collection::<TruckDb>("trucks");
         let new_truck_db = TruckDb {
@@ -220,7 +224,7 @@ impl TruckRepository for TruckRepositoryImpl {
         let truck_active = truck_model.into_active_model();
         truck_active.delete(&*self.db)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e: sea_orm::DbErr| DomainError::DatabaseError(e.to_string()))?;
         Ok(())
         {% elif database == "mongodb" %}
         let collection = self.client.database("{{ name | replace(from="-", to="_") }}_db").collection::<TruckDb>("trucks");

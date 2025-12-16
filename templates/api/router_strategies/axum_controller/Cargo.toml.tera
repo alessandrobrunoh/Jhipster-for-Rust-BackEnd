@@ -9,7 +9,7 @@ application = { path = "../application" }
 infrastructure = { path = "../infrastructure" }
 domain = { path = "../core", package = "core" } # Core as well for direct domain types in DTOs
 
-axum = { workspace = true } # Removed macros here, added to specific controllers
+axum = { workspace = true, features = ["ws"] } # Added "ws" feature
 tokio = { workspace = true, features = ["full"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -20,6 +20,7 @@ anyhow = { workspace = true }
 validator = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
+futures = "0.3" # Added futures dependency
 
 # API Documentation
 utoipa = { workspace = true }
@@ -38,7 +39,10 @@ utoipa-scalar = { workspace = true }
 jsonwebtoken = "9.2"
 argon2 = "0.5"
 
-# Redis - if needed directly in API or for AppState
+# SeaStreamer (API layer only uses the Streamer trait usually)
+{% if "redis" in infrastructure or "kafka" in infrastructure %}
+sea-streamer = { workspace = true }
+{% endif %}
 
 [lib]
 path = "src/lib.rs"

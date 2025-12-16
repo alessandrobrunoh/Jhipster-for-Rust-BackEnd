@@ -63,3 +63,16 @@ pub struct UserLoginRequest {
 pub struct UserTokenResponse {
     pub token: String,
 }
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct LoginVM {
+    #[validate(length(min = 3))]
+    pub username: String,
+    #[validate(length(min = 1))]
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct JWTToken {
+    pub id_token: String,
+}

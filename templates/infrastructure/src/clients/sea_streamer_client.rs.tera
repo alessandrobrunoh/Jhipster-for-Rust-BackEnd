@@ -1,0 +1,62 @@
+use anyhow::{Result, Context};
+use sea_streamer::{Streamer, Consumer, Message, Producer, ConsumerMode, SeaStreamer};
+use sea_streamer::error::Error as SeaStreamerError;
+use std::sync::Arc;
+use tokio::sync::OnceCell;
+
+// Placeholder for SeaStreamer instance
+// In a real application, you might have different Streamer instances for different backends (Redis, Kafka)
+// or a single instance that handles all.
+pub struct SeaStreamerClient {
+    pub streamer: Arc<SeaStreamer>,
+}
+
+pub async fn get_sea_streamer_client() -> Result<Arc<SeaStreamerClient>> {
+    static INSTANCE: OnceCell<Arc<SeaStreamerClient>> = OnceCell::const_new();
+    INSTANCE.get_or_try_init(|| async {
+        // Here you would configure and connect to your SeaStreamer backend (Redis or Kafka)
+        // For simplicity, this example connects to Redis if selected, otherwise Kafka
+        
+        {% if "redis" in infrastructure %}
+        let streamer_uri = "redis://127.0.0.1:6379/1".parse().context("Invalid Redis Streamer URI")?;
+        {% elif "kafka" in infrastructure %}
+        let streamer_uri = "kafka://localhost:9092/my_topic".parse().context("Invalid Kafka Streamer URI")?;
+        {% else %}
+        // If neither Redis nor Kafka is selected, this client won't be used or will error.
+        // For now, default to a dummy URI or error if no streamer backend is specified.
+        let streamer_uri = "memory".parse().context("No Streamer backend configured")?;
+        {% endif %}
+
+        let streamer = SeaStreamer::connect(streamer_uri, Default::default()).await?;
+        Ok(Arc::new(SeaStreamerClient { streamer }))
+    })
+    .await
+    .map(|c| Arc::clone(c))
+}
+
+// Example Producer usage
+pub async fn produce_message(topic: &str, key: &str, payload: &str) -> Result<(), SeaStreamerError> {
+    let client = get_sea_streamer_client().await?;
+    let producer: &dyn Producer = client.streamer.create_producer(topic.to_string(), Default::default()).await?;
+    producer.send(producer.create_message(payload.to_string()).set_key(key.to_string())).await?;
+    Ok(())
+}
+
+// Example Consumer usage
+pub async fn consume_messages(topic: &str, group: &str) -> Result<Vec<String>, SeaStreamerError> {
+    let client = get_sea_streamer_client().await?;
+    let consumer: &dyn Consumer = client.streamer.create_consumer(
+        vec![topic.to_string()],
+        group.to_string(),
+        ConsumerMode::LoadBalanced,
+        Default::default(),
+    ).await?;
+
+    let mut messages = Vec::new();
+    for _ in 0..5 { // Consume a few messages for example
+        if let Some(msg) = consumer.next().await {
+            messages.push(msg.message().payload_str().unwrap_or_default().to_string());
+        }
+    }
+    Ok(messages)
+}

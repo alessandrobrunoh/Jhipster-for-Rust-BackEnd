@@ -1,1 +1,3 @@
-pub mod redis_client;
+{% if "redis" in infrastructure or "kafka" in infrastructure %}
+pub mod sea_streamer_client;
+{% endif %}
