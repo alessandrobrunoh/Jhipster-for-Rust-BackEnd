@@ -66,3 +66,34 @@ Offrire uno stack produttivo “ready-to-build” che standardizza convenzioni e
 - “Portabilità”: runtime intercambiabili (Axum/Actix) senza cambiare la DSL.
 - Next: JWT completo, OpenAPI, validazioni avanzate, relazioni, plugin Redis/Jobs.
 - Futuro: gateway/API composition, admin auto-generato, analytics
+
+# Example
+```bash
+Welcome to Rhupster - The Rust/Axum Enterprise Generator
+Let's configure your new project.
+
+✔ What is your project name? · my-axum-app
+✔ Select a Database · Postgres
+✔ Select an ORM · Sqlx
+✔ Select Infrastructure & Caching ·
+✔ Select Routing Strategy · AxumController
+✔ Select API Documentation UI · Swagger
+✔ Select a Frontend Framework · React
+✔ Select Authentication Strategy · JWT (User/Role System)
+✔ Enable HATEOAS (Hypermedia) support? · no
+✔ Generate Docker Compose? · yes
+✔ Select AI Agents (for future context folders) · Claude
+
+Configuration Complete!
+Generating project 'my-axum-app'...
+  - Database: Postgres
+  - ORM: Sqlx
+  - Auth: Jwt
+  - Domain: Trucks & Products included.
+Using embedded templates.
+Generating Frontend...
+
+Success! Project generated.
+cd /Users/tacosalfornoh/Coding/Rust/Rhupster/rhupster-cli/src/my-axum-app
+cargo run
+```
