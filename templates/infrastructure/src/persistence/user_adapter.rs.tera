@@ -8,7 +8,7 @@ use anyhow::Context;
 {% endif %}
 use std::sync::Arc;
 
-use super::db_models::{UserDb{% if orm == "diesel" %}, NewUserDb{% elif orm == "seaorm" %}, ActiveModel{% endif %}};
+use super::db_models::{UserDb{% if orm == "diesel" %}, NewUserDb{% elif orm == "seaorm" %}, UserEntity, UserModel, UserActiveModel{% endif %}};
 
 {% if orm == "sqlx" %}
 use super::db_connection::DbPool;
@@ -19,8 +19,7 @@ use diesel::insert_into;
 use super::schema::users;
 {% elif orm == "seaorm" %}
 use super::db_connection::DatabaseConnection;
-use sea_orm::{ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait, ActiveValue::Set};
-use super::entities::users::{Entity as UserEntity, Model as UserModel}; // Assuming sea-orm generates entities/users.rs
+use sea_orm::{ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait, Set};
 {% elif database == "mongodb" %}
 use super::db_connection::Client;
 use mongodb::{bson::doc, options::FindOneOptions};
@@ -107,7 +106,7 @@ impl UserRepository for UserRepositoryImpl {
         Ok(res)
         {% elif orm == "seaorm" %}
         let res = UserEntity::find()
-            .filter(users::Column::Username.eq(username))
+            .filter(super::db_models::users::Column::Username.eq(username))
             .one(&*self.db)
             .await
             .map_err(|e| DomainError::DatabaseError(e.to_string()))?
@@ -178,11 +177,11 @@ impl UserRepository for UserRepositoryImpl {
         }
         {% elif orm == "seaorm" %}
         let user_model: UserModel = user.clone().into(); // Assuming conversion is possible
-        let active_model: ActiveModel = user.into();
+        let active_model: UserActiveModel = user.into();
         let saved_model = active_model.save(&*self.db)
             .await
             .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-        Ok(saved_model.into_model().into())
+        Ok(saved_model.try_into_model().map_err(|e| DomainError::DatabaseError(e.to_string()))?.into())
         {% elif database == "mongodb" %}
         let collection = self.client.database("{{ name | replace(from="-", to="_") }}_db").collection::<UserDb>("users");
         let new_user_db = UserDb {
@@ -218,13 +217,13 @@ impl UserRepository for UserRepositoryImpl {
             .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
         Ok(())
         {% elif orm == "seaorm" %}
-        let user: ActiveModel = UserEntity::find_by_id(id.0 as i64)
+        let user_model: UserModel = UserEntity::find_by_id(id.0 as i64)
             .one(&*self.db)
             .await
             .map_err(|e| DomainError::DatabaseError(e.to_string()))?
-            .ok_or_else(|| DomainError::UserNotFound(id.0.to_string()))?
-            .into_active_model();
-        user.delete(&*self.db)
+            .ok_or_else(|| DomainError::UserNotFound(id.0.to_string()))?;
+        let user_active = user_model.into_active_model();
+        user_active.delete(&*self.db)
             .await
             .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
         Ok(())

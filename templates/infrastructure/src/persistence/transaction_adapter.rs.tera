@@ -10,7 +10,6 @@ use super::db_connection::DbPool;
 // Diesel transactions are usually managed via connection, difficult to abstract this way without a connection manager
 // Placeholder implementation
 {% elif orm == "seaorm" %}
-use sea_orm::{DatabaseTransaction, TransactionTrait};
 use super::db_connection::DatabaseConnection;
 {% elif database == "mongodb" %}
 use super::db_connection::Client;

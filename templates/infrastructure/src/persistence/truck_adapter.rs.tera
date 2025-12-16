@@ -8,7 +8,7 @@ use anyhow::Context;
 {% endif %}
 use std::sync::Arc;
 
-use super::db_models::{TruckDb{% if orm == "diesel" %}, NewTruckDb{% elif orm == "seaorm" %}, TruckActiveModel{% endif %}};
+use super::db_models::{TruckDb{% if orm == "diesel" %}, NewTruckDb{% elif orm == "seaorm" %}, TruckEntity, TruckModel, TruckActiveModel{% endif %}};
 
 {% if orm == "sqlx" %}
 use super::db_connection::DbPool;
@@ -19,8 +19,7 @@ use diesel::insert_into;
 use super::schema::trucks;
 {% elif orm == "seaorm" %}
 use super::db_connection::DatabaseConnection;
-use sea_orm::{ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait, ActiveValue::Set};
-use super::entities::trucks::{Entity as TruckEntity, Model as TruckModel};
+use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 {% elif database == "mongodb" %}
 use super::db_connection::Client;
 use mongodb::{bson::doc, options::FindOneOptions, options::FindOptions}; // Added FindOptions for find_all
@@ -177,7 +176,7 @@ impl TruckRepository for TruckRepositoryImpl {
         let saved_model = active_model.save(&*self.db)
             .await
             .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-        Ok(saved_model.into_model().into())
+        Ok(saved_model.try_into_model().map_err(|e| DomainError::DatabaseError(e.to_string()))?.into())
         {% elif database == "mongodb" %}
         let collection = self.client.database("{{ name | replace(from="-", to="_") }}_db").collection::<TruckDb>("trucks");
         let new_truck_db = TruckDb {
@@ -213,13 +212,13 @@ impl TruckRepository for TruckRepositoryImpl {
             .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
         Ok(())
         {% elif orm == "seaorm" %}
-        let truck: TruckActiveModel = TruckEntity::find_by_id(id.0 as i64)
+        let truck_model: TruckModel = TruckEntity::find_by_id(id.0 as i64)
             .one(&*self.db)
             .await
             .map_err(|e| DomainError::DatabaseError(e.to_string()))?
-            .ok_or_else(|| DomainError::TruckNotFound(id.0.to_string()))?
-            .into_active_model();
-        truck.delete(&*self.db)
+            .ok_or_else(|| DomainError::TruckNotFound(id.0.to_string()))?;
+        let truck_active = truck_model.into_active_model();
+        truck_active.delete(&*self.db)
             .await
             .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
         Ok(())
